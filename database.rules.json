@@ -1,0 +1,20 @@
+{
+  "rules": {
+    "presence": {
+      "$canvasId": {
+        "$userId": {
+          ".read": true,
+          ".write": "$userId === auth.uid"
+        }
+      }
+    },
+    "cursors": {
+      "$canvasId": {
+        "$userId": {
+          ".read": true,
+          ".write": "$userId === auth.uid"
+        }
+      }
+    }
+  }
+}
