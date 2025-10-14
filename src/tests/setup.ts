@@ -1,4 +1,5 @@
 import { beforeAll, afterAll } from 'vitest';
+import '@testing-library/jest-dom';
 
 // Setup emulator environment variables for testing
 beforeAll(() => {

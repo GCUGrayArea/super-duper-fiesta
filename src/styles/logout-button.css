@@ -1,0 +1,145 @@
+/* Logout Button Styles */
+.logout-button-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border: 1px solid #e1e5e9;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 300px;
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.user-info-compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.user-name-compact {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.user-badge-compact {
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.user-badge-compact.guest {
+  background: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeaa7;
+}
+
+.user-badge-compact.registered {
+  background: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #b8daff;
+}
+
+.logout-btn {
+  background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  min-width: 100px;
+  justify-content: center;
+}
+
+.logout-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #c82333 0%, #a71e2a 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+.logout-btn:active {
+  transform: translateY(0);
+}
+
+.logout-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.logout-btn.logging-out {
+  background: linear-gradient(135deg, #6c757d 0%, #5a6268 100%);
+}
+
+.logout-icon {
+  font-size: 0.9rem;
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Mobile styles */
+@media (max-width: 768px) {
+  .logout-button-container {
+    top: 10px;
+    right: 10px;
+    left: 10px;
+    max-width: none;
+    padding: 10px 12px;
+  }
+  
+  .user-name-compact {
+    font-size: 0.8rem;
+    max-width: 100px;
+  }
+  
+  .logout-btn {
+    font-size: 0.8rem;
+    padding: 6px 10px;
+    min-width: 80px;
+  }
+  
+  .user-badge-compact {
+    display: none; /* Hide badges on mobile to save space */
+  }
+}
+
+/* Ensure logout button appears above other elements */
+.logout-button-container {
+  z-index: 9999;
+}
