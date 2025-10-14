@@ -1,9 +1,11 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
+import canvasReducer from './canvasSlice';
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
+    canvas: canvasReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
