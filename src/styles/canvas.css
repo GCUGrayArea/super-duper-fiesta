@@ -1,0 +1,191 @@
+/* Canvas Page Layout */
+.canvas-page {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #f8f9fa;
+}
+
+.canvas-header {
+  background: #ffffff;
+  padding: 1rem 2rem;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.canvas-header h1 {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.canvas-header p {
+  margin: 0.5rem 0 0 0;
+  color: #6c757d;
+  font-size: 0.9rem;
+}
+
+.canvas-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Toolbar Styles */
+.toolbar {
+  width: 280px;
+  background: #ffffff;
+  border-right: 1px solid #e9ecef;
+  padding: 1.5rem;
+  overflow-y: auto;
+  box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+}
+
+.toolbar-section {
+  margin-bottom: 2rem;
+}
+
+.toolbar-section h3 {
+  margin: 0 0 1rem 0;
+  color: #2c3e50;
+  font-size: 1rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.toolbar-btn {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.5rem;
+}
+
+.toolbar-btn.primary {
+  background: #007bff;
+  color: white;
+}
+
+.toolbar-btn.primary:hover {
+  background: #0056b3;
+  transform: translateY(-1px);
+}
+
+.toolbar-btn.danger {
+  background: #dc3545;
+  color: white;
+}
+
+.toolbar-btn.danger:hover {
+  background: #c82333;
+  transform: translateY(-1px);
+}
+
+.toolbar-info {
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #495057;
+  border-left: 3px solid #007bff;
+}
+
+/* Canvas Area */
+.canvas-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 1.5rem;
+  background: #f1f3f4;
+  overflow: hidden;
+}
+
+.canvas-container {
+  position: relative;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  overflow: hidden;
+}
+
+.canvas-container canvas {
+  display: block;
+  cursor: crosshair;
+}
+
+.canvas-controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 0.5rem 1rem;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .canvas-workspace {
+    flex-direction: column;
+  }
+  
+  .toolbar {
+    width: 100%;
+    height: auto;
+    max-height: 200px;
+    border-right: none;
+    border-bottom: 1px solid #e9ecef;
+  }
+  
+  .canvas-area {
+    padding: 1rem;
+  }
+  
+  .canvas-header h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* Loading and Error States */
+.canvas-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  color: #6c757d;
+  font-size: 1.1rem;
+}
+
+.canvas-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  color: #dc3545;
+  text-align: center;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.toolbar-section {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.canvas-container {
+  animation: fadeIn 0.5s ease-out;
+}

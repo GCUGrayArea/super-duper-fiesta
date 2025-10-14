@@ -50,7 +50,54 @@ vercel.json
 
 ---
 
-## **PR 2 — Firebase Integration + Emulator Suite Setup**
+## **PR 2 — Core Canvas Implementation (5,000×5,000 px Multi-Shape Canvas)** ✅ **COMPLETED**
+
+**Goal:** Implement canvas using **Fabric.js**, including rectangle, circle, and text creation and interaction.
+
+### **Tasks**
+
+* [x] Create `CanvasPage.tsx` and `Canvas.tsx` components.
+* [x] Configure **5,000×5,000 px Fabric canvas** with pan and zoom support.
+* [x] Add "Create Rectangle" button (rectangle spawns at center of viewport).
+* [x] Add "Create Circle" and "Create Text" buttons.
+* [x] Enable move, resize, and delete actions.
+* [x] Connect Fabric events to Redux store (`canvasSlice.ts`).
+* [x] Implement drag-to-front z-order management.
+* [x] Add double-click text editing with proper wrapping.
+
+### **Files Created/Modified**
+
+```
+src/pages/CanvasPage.tsx          ✅ DONE
+src/components/Canvas.tsx         ✅ DONE
+src/components/Toolbar.tsx        ✅ DONE
+src/store/canvasSlice.ts          ✅ DONE
+src/store/index.ts                ✅ DONE
+src/styles/canvas.css             ✅ DONE
+src/types/fabric.d.ts             ✅ DONE
+```
+
+### **Testing**
+
+✅ **Unit Tests**
+
+* [x] `__tests__/canvasSlice.test.ts` ✅ **COMPLETED**
+
+  * Verify reducers: `addShape`, `moveShape`, `resizeShape`, `deleteShape`, `updateShapeText`.
+  * Test rectangle, circle, and text shape creation.
+  * Test drag timestamp tracking for z-order management.
+    
+✅ **Integration Tests**
+* [x] Manual testing completed ✅ **COMPLETED**
+
+  * Verified "Create Rectangle", "Create Circle", and "Create Text" buttons work.
+  * Confirmed shapes appear at viewport center and move/resize properly.
+  * Tested drag-to-front z-order behavior.
+  * Validated text editing with double-click interaction.
+
+---
+
+## **PR 3 — Firebase Integration + Emulator Suite Setup**
 
 **Goal:** Connect Firebase backend and local emulators for Auth, Firestore, and Realtime DB.
 
@@ -106,7 +153,7 @@ src/firebase/db.ts
 
 ---
 
-## **PR 3 — Authentication UI and Presence Tracking**
+## **PR 4 — Authentication UI and Presence Tracking**
 
 **Goal:** Implement user login flow and display online user presence.
 
@@ -137,43 +184,6 @@ src/App.tsx
 
   * Logs in guest and registered users.
   * Confirms presence list updates when users connect/disconnect.
-
----
-
-## **PR 4 — Core Canvas Implementation (5,000×5,000 px Rectangle Canvas)**
-
-**Goal:** Implement collaborative canvas using **Fabric.js**, including rectangle creation and interaction.
-
-### **Tasks**
-
-* [ ] Create `CanvasPage.tsx` and `Canvas.tsx` components.
-* [ ] Configure **5,000×5,000 px Fabric canvas** with pan and zoom support.
-* [ ] Add “Create Rectangle” button (rectangle spawns at center of viewport).
-* [ ] Enable move, resize, and delete actions.
-* [ ] Connect Fabric events to Redux store (`canvasSlice.ts`).
-
-### **Files Created/Modified**
-
-```
-src/pages/CanvasPage.tsx
-src/components/Canvas.tsx
-src/components/Toolbar.tsx
-src/store/canvasSlice.ts
-src/styles/canvas.css
-```
-
-### **Testing**
-
-✅ **Unit Tests**
-
-* [ ] `__tests__/canvasSlice.test.ts`
-
-  * Verify reducers: `addShape`, `moveShape`, `resizeShape`, `deleteShape`.
-    ✅ **Integration Tests**
-* [ ] `__tests__/canvasInteraction.test.tsx`
-
-  * Simulate “Create Rectangle” button click and Fabric canvas rendering.
-  * Confirm shape appears at viewport center and moves/resizes properly.
 
 ---
 
