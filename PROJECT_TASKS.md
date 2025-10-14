@@ -51,6 +51,7 @@ tsconfig.json
 ---
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 ## **PR 2 — Core Canvas Implementation (5,000×5,000 px Multi-Shape Canvas)** ✅ **COMPLETED**
 
 **Goal:** Implement canvas using **Fabric.js**, including rectangle, circle, and text creation and interaction.
@@ -99,6 +100,9 @@ src/types/fabric.d.ts             ✅ DONE
 ---
 
 ## **PR 3 — Firebase Integration + Emulator Suite Setup**
+=======
+## **PR 3 — Firebase Integration + Emulator Suite Setup** ✅ **COMPLETED**
+>>>>>>> Stashed changes
 =======
 ## **PR 3 — Firebase Integration + Emulator Suite Setup** ✅ **COMPLETED**
 >>>>>>> Stashed changes
