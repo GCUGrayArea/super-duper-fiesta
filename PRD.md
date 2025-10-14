@@ -50,6 +50,9 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 
   * Move and resize rectangles.
   * Delete objects.
+  * Pan by dragging with no object selected.
+  * Zoom with scroll wheel.
+  
 * **Performance:**
 
   * Maintain **60 FPS** for pan, zoom, and object manipulation.
