@@ -25,22 +25,26 @@ export const rtdb = getDatabase(app);
 // Connect to emulators in development
 if (import.meta.env.DEV) {
   try {
-    // Connect to Auth emulator
+    // Connect to Auth emulator (only if not already connected)
     if (!auth.emulatorConfig) {
       connectAuthEmulator(auth, 'http://localhost:9099');
     }
-    
-    // Connect to Firestore emulator
-    if (!db._delegate._databaseId.host.includes('localhost')) {
-      connectFirestoreEmulator(db, 'localhost', 8080);
-    }
-    
-    // Connect to Realtime Database emulator
-    if (!rtdb._delegate._repoInfo.host.includes('localhost')) {
-      connectDatabaseEmulator(rtdb, 'localhost', 9000);
-    }
   } catch (error) {
-    console.log('Emulators already connected or not available:', error);
+    console.log('Auth emulator already connected or not available:', error);
+  }
+
+  try {
+    // Connect to Firestore emulator
+    connectFirestoreEmulator(db, 'localhost', 8080);
+  } catch (error) {
+    console.log('Firestore emulator already connected or not available:', error);
+  }
+
+  try {
+    // Connect to Realtime Database emulator
+    connectDatabaseEmulator(rtdb, 'localhost', 9000);
+  } catch (error) {
+    console.log('Realtime Database emulator already connected or not available:', error);
   }
 }
 
