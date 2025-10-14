@@ -16,7 +16,7 @@ import {
   Unsubscribe as RTDBUnsubscribe,
 } from 'firebase/database';
 import { db, rtdb } from './config';
-import { AuthUser } from './auth';
+import { User } from '../store/authSlice';
 
 // Canvas shape interface
 export interface CanvasShape {
@@ -193,7 +193,7 @@ export const unlockShape = async (
 // Presence tracking using Realtime Database
 export const subscribeToPresence = (
   canvasId: string,
-  user: AuthUser,
+  user: User,
   userColor: string,
   callback: (users: { [uid: string]: UserPresence }) => void
 ): RTDBUnsubscribe => {

@@ -47,43 +47,39 @@ Phase 1: Project Setup & Infrastructure
 Phase 2: Authentication System
 2.1 Authentication UI
 
- Create login page component
- Create signup page component with display name field
- Create authentication form with email/password fields
- Add form validation for email and password
- Add optional display name input with placeholder text
- Create guest login flow with name prompt (optional input)
- Add loading states for authentication actions
- Create error message display component
- Write unit tests for form validation logic
- Write unit tests for error message display component
+✅ Create login page component
+✅ Create signup page component with display name field
+✅ Create authentication form with email/password fields
+✅ Add form validation for email and password
+✅ Add optional display name input with placeholder text
+✅ Add loading states for authentication actions
+✅ Create error message display component
+✅ Write unit tests for form validation logic
+✅ Write unit tests for error message display component
 
 2.2 Authentication Logic
 
- Implement Firebase email/password signup
- Extract display name from email if none provided (text before @)
- Implement Firebase email/password login
- Implement anonymous/guest authentication
- Generate display name for anonymous users (e.g., "Guest_1234") if none provided
- Create authentication state management with Redux Toolkit
- Implement logout functionality
- Add user session persistence
- Create authentication route guards/protection
- Store user profile data (display name, unique ID, email) in Firestore
- Write unit tests for display name extraction from email
- Write unit tests for guest display name generation
- Write unit tests for authentication Redux slice (actions and reducers)
- Write unit tests for route guard logic
+✅ Implement Firebase email/password signup
+✅ Use full email address as fallback display name when displayName is null
+✅ Implement Firebase email/password login
+✅ Create authentication state management with Redux Toolkit
+✅ Implement logout functionality
+✅ Add user session persistence
+✅ Create authentication route guards/protection
+✅ Store user profile data (display name, unique ID, email) in Firestore
+✅ Write unit tests for display name extraction from email
+✅ Write unit tests for authentication Redux slice (actions and reducers)
+✅ Write unit tests for route guard logic
 
 2.3 User Profile Management
 
- Create user profile data structure in Firestore
- Save display name during signup/guest login
- Generate unique user IDs
- Create user profile retrieval logic
- Calculate user color hash for cursor (hash last char of email/displayName → color index)
- Write unit tests for user color hash calculation
- Write unit tests for color index mapping (all 16 hex chars → 8 colors)
+✅ Create user profile data structure in Firestore
+✅ Save display name during signup
+✅ Generate unique user IDs
+✅ Create user profile retrieval logic
+✅ Calculate user color hash for cursor (hash last char of email → color index)
+✅ Write unit tests for user color hash calculation
+✅ Write unit tests for color index mapping (all 16 hex chars → 8 colors)
 
 
 Phase 3: Canvas Core Implementation & UI (DO THIS FIRST AFTER AUTH)
@@ -568,6 +564,7 @@ Phase 8: Cross-Browser Testing & Quality Assurance
  Add missing unit tests for edge cases
  Review and refactor flaky tests
  Ensure all tests pass in CI/CD pipeline
+ Replace Firebase error messages with user-friendly error messages
 
 8.2 Cross-Browser Functional Testing
 
@@ -721,9 +718,7 @@ Stale locks cleaned up on disconnect
 ✅ Authentication
 
 Email/password signup with optional display name
-Email prefix used as fallback display name
-Guest login with optional custom name
-Generated name assigned to guests if none provided
+Email address used as fallback display name when displayName is null
 Session persistence works across refreshes
 
 ✅ Performance & Stability
@@ -882,9 +877,9 @@ After Phase 6 (optimization):
 
 When to Move Between Phases
 
-Phase 1 → Phase 2: When project setup is complete and you can run npm run dev
+✅ Phase 1 → Phase 2: When project setup is complete and you can run npm run dev
 
-Phase 2 → Phase 3: When authentication works (can sign up, log in, log out) and user profile/color is calculated
+✅ Phase 2 → Phase 3: When authentication works (can sign up, log in, log out) and user profile/color is calculated
 
 Phase 3 → Phase 4: ONLY when:
 

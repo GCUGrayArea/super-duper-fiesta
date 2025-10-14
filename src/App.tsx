@@ -1,35 +1,63 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { PublicRoute } from './components/PublicRoute';
+import { 
+  LandingPage, 
+  LoginPage, 
+  SignupPage, 
+  CanvasPage, 
+  LogoutPage 
+} from './pages';
+import { useAuthState } from './hooks/useAuthState';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Initialize Firebase auth state synchronization
+  useAuthState();
 
   return (
-    <>
-      <div>
-        <a href="https://vitejs.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Collab Canvas</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <Router>
+      <Routes>
+        {/* Landing page - redirects based on auth status */}
+        <Route path="/" element={<LandingPage />} />
+        
+        {/* Public routes - redirect to canvas if authenticated */}
+        <Route 
+          path="/login" 
+          element={
+            <PublicRoute>
+              <LoginPage />
+            </PublicRoute>
+          } 
+        />
+        
+        <Route 
+          path="/signup" 
+          element={
+            <PublicRoute>
+              <SignupPage />
+            </PublicRoute>
+          } 
+        />
+        
+        {/* Protected routes - require authentication */}
+        <Route 
+          path="/canvas" 
+          element={
+            <ProtectedRoute>
+              <CanvasPage />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Logout page - handles signout and redirect */}
+        <Route path="/logout" element={<LogoutPage />} />
+        
+        {/* Catch all route - redirect to landing */}
+        <Route path="*" element={<LandingPage />} />
+      </Routes>
+    </Router>
+  );
 }
 
-export default App
+export default App;

@@ -1,7 +1,8 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator, setPersistence, browserSessionPersistence } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getDatabase, connectDatabaseEmulator } from 'firebase/database';
+import { clearFirebaseAuthStorage } from '../utils/clearAuthStorage';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -21,6 +22,15 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const rtdb = getDatabase(app);
+
+// Clear any existing Firebase auth storage from previous sessions
+clearFirebaseAuthStorage();
+
+// Set session-only persistence (not across page refreshes)
+// NOTE: This matches the requirement for session-only persistence, subject to change
+setPersistence(auth, browserSessionPersistence).catch((error) => {
+  console.error('Failed to set Firebase auth persistence:', error);
+});
 
 // Connect to emulators in development
 if (import.meta.env.DEV && import.meta.env.VITE_USE_FIREBASE_EMULATOR === 'true') {
