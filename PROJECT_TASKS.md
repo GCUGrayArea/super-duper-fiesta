@@ -5,43 +5,43 @@ Building a real-time collaborative design tool (Figma-like clone) with multiplay
 Phase 0: Environment Strategy
 0.1 Firebase Project Setup
 
- Create development Firebase project for testing
- Create production Firebase project for deployment
- Document Firebase project IDs and configuration for both environments
- Set up environment variable files for dev and prod (.env.development, .env.production)
+✅ Create development Firebase project for testing
+✅ Create production Firebase project for deployment
+✅ Document Firebase project IDs and configuration for both environments
+✅ Set up environment variable files for dev and prod (.env.development, .env.production)
 
 
 Phase 1: Project Setup & Infrastructure
 1.1 Development Environment Setup
 
- Initialize React + TypeScript project with Vite
- Configure ESLint and Prettier for code quality
- Set up Git repository with appropriate .gitignore
- Create basic project folder structure (components, hooks, utils, types, store)
- Install core dependencies: React, TypeScript, Redux Toolkit, Fabric.js
- Install testing dependencies: Vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event
- Configure Vitest test runner
- Set up test file structure (__tests__ directories or .test.ts files)
- Create test utilities and common mocks
+✅ Initialize React + TypeScript project with Vite
+✅ Configure ESLint and Prettier for code quality
+✅ Set up Git repository with appropriate .gitignore
+✅ Create basic project folder structure (components, hooks, utils, types, store)
+✅ Install core dependencies: React, TypeScript, Redux Toolkit, Fabric.js
+✅ Install testing dependencies: Vitest, @testing-library/react, @testing-library/jest-dom, @testing-library/user-event
+✅ Configure Vitest test runner
+✅ Set up test file structure (__tests__ directories or .test.ts files)
+✅ Create test utilities and common mocks
 
 1.2 Firebase Configuration (Dev & Prod)
 
- Enable Firebase Authentication in both projects
- Enable Firestore Database in both projects
- Enable Firebase Realtime Database for presence/cursors in both projects
- Configure Firebase security rules for authentication
- Add Firebase SDK to project and create configuration files
- Set up environment variables for Firebase config (dev and prod)
- Create Firebase initialization utility that switches based on environment
- Write unit tests for Firebase initialization utility (environment switching)
+✅ Enable Firebase Authentication in both projects
+✅ Enable Firestore Database in both projects
+✅ Enable Firebase Realtime Database for presence/cursors in both projects
+✅ Configure Firebase security rules for authentication
+✅ Add Firebase SDK to project and create configuration files
+✅ Set up environment variables for Firebase config (dev and prod)
+✅ Create Firebase initialization utility that switches based on environment
+✅ Write unit tests for Firebase initialization utility (environment switching)
 
 1.3 Deployment Setup
 
- Create Vercel account and link repository
- Configure Vercel project settings
- Set up environment variables in Vercel (production Firebase config)
- Configure deployment preview settings (use dev Firebase)
- Test initial deployment
+✅ Create Vercel account and link repository
+✅ Configure Vercel project settings
+✅ Set up environment variables in Vercel (production Firebase config)
+✅ Configure deployment preview settings (use dev Firebase)
+✅ Test initial deployment
 
 
 Phase 2: Authentication System

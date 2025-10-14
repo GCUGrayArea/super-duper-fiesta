@@ -13,7 +13,9 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "emulators:start": "firebase emulators:start --import=./.firebase-data --export-on-exit",
-    "test:integration": "firebase emulators:exec --only firestore,database,auth 'vitest run --config vitest.config.ts'"
+    "test:integration": "firebase emulators:exec --only firestore,database,auth 'vitest run --config vitest.config.ts'",
+    "deploy": "vercel --prod",
+    "deploy:preview": "vercel"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.9.0",
