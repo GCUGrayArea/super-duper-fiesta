@@ -1,7 +1,7 @@
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  signInAnonymously,
+  signInAnonymously as firebaseSignInAnonymously,
   signOut,
   updateProfile,
   User,
@@ -70,7 +70,7 @@ export const signUpWithEmail = async (
 // Sign in anonymously (guest login)
 export const signInAnonymously = async (displayName?: string): Promise<AuthUser> => {
   try {
-    const result: UserCredential = await signInAnonymously(auth);
+    const result: UserCredential = await firebaseSignInAnonymously(auth);
     
     // Update profile with display name if provided
     if (displayName && result.user) {

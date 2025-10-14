@@ -13,7 +13,10 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "emulators:start": "firebase emulators:start --import=./.firebase-data --export-on-exit",
-    "test:integration": "firebase emulators:exec --only firestore,database,auth 'vitest run --config vitest.config.ts'"
+    "test:integration": "firebase emulators:exec --only firestore,database,auth 'vitest run --config vitest.config.ts'",
+    "deploy": "npm run build && firebase deploy",
+    "deploy:hosting": "npm run build && firebase deploy --only hosting",
+    "preview:firebase": "npm run build && firebase emulators:start --only hosting"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.9.0",
