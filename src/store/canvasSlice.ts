@@ -5,6 +5,7 @@ import {
   calculateNextZIndex, 
   sortObjectsByZIndex 
 } from '../utils/canvasObjects';
+import { SyncState } from '../utils/syncHelpers';
 
 // Canvas state interface
 export interface CanvasState {
@@ -13,6 +14,10 @@ export interface CanvasState {
   selection: Selection; // Current selection state
   isLoading: boolean; // Loading state for operations
   error: string | null; // Error state
+  // Phase 4 sync state
+  isConnected: boolean; // Firestore connection status
+  lastSyncTime: number | null; // Timestamp of last successful sync
+  syncState: SyncState; // Track last synced states for threshold calculations
 }
 
 // Initial state
@@ -28,6 +33,10 @@ const initialState: CanvasState = {
   },
   isLoading: false,
   error: null,
+  // Phase 4 sync state
+  isConnected: false,
+  lastSyncTime: null,
+  syncState: {},
 };
 
 // Canvas slice
@@ -36,17 +45,17 @@ const canvasSlice = createSlice({
   initialState,
   reducers: {
     // Add a new rectangle at specified position
-    addRectangle: (state, action: PayloadAction<{ x: number; y: number }>) => {
-      const { x, y } = action.payload;
-      const newRectangle = createRectangle(x, y, state.objects);
+    addRectangle: (state, action: PayloadAction<{ x: number; y: number; userId: string }>) => {
+      const { x, y, userId } = action.payload;
+      const newRectangle = createRectangle(x, y, userId, state.objects);
       state.objects.push(newRectangle);
       // Auto-select the new object
       state.selection.selectedObjectId = newRectangle.id;
     },
 
     // Update an existing object
-    updateObject: (state, action: PayloadAction<{ id: string; updates: Partial<CanvasObject> }>) => {
-      const { id, updates } = action.payload;
+    updateObject: (state, action: PayloadAction<{ id: string; updates: Partial<CanvasObject>; userId?: string }>) => {
+      const { id, updates, userId } = action.payload;
       const objectIndex = state.objects.findIndex(obj => obj.id === id);
       
       if (objectIndex !== -1) {
@@ -54,6 +63,7 @@ const canvasSlice = createSlice({
           ...state.objects[objectIndex],
           ...updates,
           updatedAt: Date.now(),
+          ...(userId && { lastModifiedBy: userId }),
         };
       }
     },
@@ -70,8 +80,8 @@ const canvasSlice = createSlice({
     },
 
     // Bring object to front (set highest z-index)
-    bringToFront: (state, action: PayloadAction<string>) => {
-      const objectId = action.payload;
+    bringToFront: (state, action: PayloadAction<{ objectId: string; userId?: string }>) => {
+      const { objectId, userId } = action.payload;
       const objectIndex = state.objects.findIndex(obj => obj.id === objectId);
       
       if (objectIndex !== -1) {
@@ -80,6 +90,7 @@ const canvasSlice = createSlice({
           ...state.objects[objectIndex],
           zIndex: newZIndex,
           updatedAt: Date.now(),
+          ...(userId && { lastModifiedBy: userId }),
         };
       }
     },
@@ -172,6 +183,67 @@ const canvasSlice = createSlice({
         state.selection.selectedObjectId = null;
       }
     },
+
+    // Phase 4 sync actions
+    setConnectionStatus: (state, action: PayloadAction<boolean>) => {
+      state.isConnected = action.payload;
+    },
+
+    setSyncTime: (state, action: PayloadAction<number>) => {
+      state.lastSyncTime = action.payload;
+    },
+
+    updateSyncState: (state, action: PayloadAction<SyncState>) => {
+      state.syncState = action.payload;
+    },
+
+    // Merge remote objects with local state (with smart echo prevention)
+    mergeRemoteObjects: (state, action: PayloadAction<{ objects: CanvasObject[]; currentUserId: string }>) => {
+      const { objects: remoteObjects, currentUserId } = action.payload;
+      
+      // Create a map of current objects for efficient lookup
+      const currentObjectsMap = new Map(state.objects.map(obj => [obj.id, obj]));
+      
+      // Merge remote objects with local objects
+      const mergedObjects: CanvasObject[] = [];
+      
+      // Process each remote object
+      for (const remoteObj of remoteObjects) {
+        const localObj = currentObjectsMap.get(remoteObj.id);
+        
+        if (!localObj) {
+          // NEW OBJECT: Always add new objects regardless of who created them
+          // This ensures creators see their own new objects via real-time listener
+          mergedObjects.push(remoteObj);
+        } else {
+          // EXISTING OBJECT: Apply echo prevention for updates
+          if (remoteObj.lastModifiedBy !== currentUserId) {
+            // Update from another user - apply it
+            mergedObjects.push(remoteObj);
+          } else {
+            // Echo update from current user - keep local version
+            mergedObjects.push(localObj);
+          }
+        }
+        
+        // Remove from local map (processed)
+        currentObjectsMap.delete(remoteObj.id);
+      }
+      
+      // Add remaining local objects (not in remote - these were deleted by others)
+      for (const [_, localObj] of currentObjectsMap) {
+        mergedObjects.push(localObj);
+      }
+      
+      // Sort by z-index and update state
+      state.objects = sortObjectsByZIndex(mergedObjects);
+      
+      // Clear selection if selected object no longer exists
+      if (state.selection.selectedObjectId && 
+          !state.objects.find(obj => obj.id === state.selection.selectedObjectId)) {
+        state.selection.selectedObjectId = null;
+      }
+    },
   },
 });
 
@@ -189,6 +261,11 @@ export const {
   setCanvasError,
   clearCanvas,
   replaceObjects,
+  // Phase 4 sync actions
+  setConnectionStatus,
+  setSyncTime,
+  updateSyncState,
+  mergeRemoteObjects,
 } = canvasSlice.actions;
 
 // Selectors for easy access to canvas state
@@ -204,6 +281,10 @@ export const selectSelectedObject = (state: { canvas: CanvasState }) => {
 };
 export const selectCanvasLoading = (state: { canvas: CanvasState }) => state.canvas.isLoading;
 export const selectCanvasError = (state: { canvas: CanvasState }) => state.canvas.error;
+// Phase 4 sync selectors
+export const selectConnectionStatus = (state: { canvas: CanvasState }) => state.canvas.isConnected;
+export const selectLastSyncTime = (state: { canvas: CanvasState }) => state.canvas.lastSyncTime;
+export const selectSyncState = (state: { canvas: CanvasState }) => state.canvas.syncState;
 
 // Export reducer as default
 export default canvasSlice.reducer;

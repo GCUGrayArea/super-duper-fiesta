@@ -5,17 +5,16 @@ import {
   selectCanvasObjects, 
   selectViewport, 
   selectSelection,
-  selectSelectedObject,
-  addRectangle,
   selectObject,
   updateObject,
   bringToFront,
   panViewport,
-  zoomViewport,
-  deleteObject
+  zoomViewport
 } from '../store/canvasSlice';
+import { selectUser } from '../store/authSlice';
 import { CANVAS_CONFIG, Rectangle, isRectangle } from '../types/canvas';
-import { calculateViewportCenter, findOverlappingObjects } from '../utils/canvasObjects';
+import { calculateViewportCenter, findOverlappingObjects, createRectangle } from '../utils/canvasObjects';
+import { useCanvasSync } from '../hooks/useCanvasSync';
 
 interface CanvasProps {
   width?: number;
@@ -35,10 +34,17 @@ export const Canvas: React.FC<CanvasProps> = ({
   const isInternalSelectionRef = useRef(false); // Flag to prevent infinite loops
 
   const dispatch = useAppDispatch();
+  const user = useAppSelector(selectUser);
   const objects = useAppSelector(selectCanvasObjects);
   const viewport = useAppSelector(selectViewport);
   const selection = useAppSelector(selectSelection);
-  const selectedObject = useAppSelector(selectSelectedObject);
+
+  // Phase 4: Canvas sync integration
+  const { isConnected, syncObject, addObject } = useCanvasSync({
+    canvasId: 'main', // Use main canvas for MVP
+    user: user!,
+    enabled: !!user
+  });
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -90,7 +96,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, [viewport, updateFabricViewport]);
 
-  // Convert Redux objects to Fabric.js objects
+  // Convert Redux objects to Fabric.js objects (MVP: position and selection only)
   const createFabricObject = useCallback((obj: Rectangle): fabric.Rect => {
     const rect = new fabric.Rect({
       left: obj.x,
@@ -101,16 +107,16 @@ export const Canvas: React.FC<CanvasProps> = ({
       stroke: obj.stroke,
       strokeWidth: obj.strokeWidth,
       opacity: obj.opacity,
-      angle: obj.rotation, // Apply rotation
+      angle: obj.rotation,
       selectable: true,
-      hasControls: true,
+      hasControls: false, // MVP: Disable resize controls
       hasBorders: true,
-      cornerStyle: 'rect',
-      cornerSize: 10,
       borderColor: '#007bff',
-      cornerColor: '#007bff',
-      transparentCorners: false,
-      lockRotation: false, // Enable rotation
+      lockRotation: true, // MVP: Lock rotation
+      lockScalingX: true, // MVP: Lock scaling
+      lockScalingY: true, // MVP: Lock scaling
+      lockMovementX: false, // Allow movement
+      lockMovementY: false, // Allow movement
     });
 
     // Store object ID for reference
@@ -169,10 +175,12 @@ export const Canvas: React.FC<CanvasProps> = ({
     if (target && (target as any).objectId) {
       const objectId = (target as any).objectId;
       dispatch(selectObject(objectId));
-      // Bring selected object to front
-      dispatch(bringToFront(objectId));
+      // Bring selected object to front with sync
+      if (user) {
+        dispatch(bringToFront({ objectId, userId: user.uid }));
+      }
     }
-  }, [dispatch]);
+  }, [dispatch, user]);
 
   // Handle canvas click (deselect if clicking empty area)
   const handleCanvasClick = useCallback((e: any) => {
@@ -187,57 +195,44 @@ export const Canvas: React.FC<CanvasProps> = ({
   }, [dispatch]);
 
 
-  // Handle object movement during drag
+  // MVP: Only handle movement (resize/rotation removed)
   const handleObjectMoving = useCallback((_e: any) => {
     // Don't update Redux during drag - it causes interruption
     // We'll update on drag end instead
   }, []);
 
-  // Handle object modification (resize, rotate, etc.) AND movement completion
-  const handleObjectModified = useCallback((e: any) => {
-    const target = e.target;
-    if (target && (target as any).objectId) {
-      const objectId = (target as any).objectId;
-      
-      // Bring to front when modifying or after moving
-      dispatch(bringToFront(objectId));
-      
-      dispatch(updateObject({
-        id: objectId,
-        updates: {
-          x: target.left || 0,
-          y: target.top || 0,
-          width: (target.width || 0) * (target.scaleX || 1),
-          height: (target.height || 0) * (target.scaleY || 1),
-          rotation: target.angle || 0, // Capture rotation angle
-        },
-      }));
-      
-      // Reset scale after updating dimensions
-      target.set({ scaleX: 1, scaleY: 1 });
-    }
-  }, [dispatch]);
-
-  // Handle mouse up on canvas to sync object positions after drag
-  const handleObjectMouseUp = useCallback(() => {
+  // Handle mouse up on canvas to sync object positions after drag (MVP: position only)
+  const handleObjectMouseUp = useCallback(async () => {
     const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
+    if (!canvas || !user) return;
     
     const activeObject = canvas.getActiveObject();
     if (activeObject && (activeObject as any).objectId) {
       const objectId = (activeObject as any).objectId;
       
-      // Update position and rotation after drag ends
+      // Bring to front when dragging
+      dispatch(bringToFront({ objectId, userId: user.uid }));
+      
+      const updates = {
+        x: activeObject.left || 0,
+        y: activeObject.top || 0,
+      };
+      
+      // Update position after drag ends
       dispatch(updateObject({
         id: objectId,
-        updates: {
-          x: activeObject.left || 0,
-          y: activeObject.top || 0,
-          rotation: activeObject.angle || 0, // Capture any rotation changes
-        },
+        updates,
+        userId: user.uid,
       }));
+      
+      // Sync with thresholds
+      try {
+        await syncObject(objectId, updates);
+      } catch (error) {
+        console.error('Failed to sync object position:', error);
+      }
     }
-  }, [dispatch]);
+  }, [dispatch, user, syncObject]);
 
   // Handle mouse wheel for zooming
   const handleMouseWheel = useCallback((e: any) => {
@@ -302,7 +297,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
   }, []);
 
-  // Add Fabric.js event listeners
+  // Add Fabric.js event listeners (MVP: selection and movement only)
   useEffect(() => {
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
@@ -312,9 +307,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on('mouse:down', handleCanvasClick);
     canvas.on('mouse:wheel', handleMouseWheel);
     
-    // Object manipulation events
+    // MVP: Only movement events (resize/rotation removed)
     canvas.on('object:moving', handleObjectMoving);
-    canvas.on('object:modified', handleObjectModified);
     canvas.on('mouse:up', handleObjectMouseUp);
     
     // Canvas panning events (only for empty areas)
@@ -328,9 +322,8 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.off('mouse:down', handleCanvasClick);
       canvas.off('mouse:wheel', handleMouseWheel);
       
-      // Object manipulation events
+      // MVP: Only movement events
       canvas.off('object:moving', handleObjectMoving);
-      canvas.off('object:modified', handleObjectModified);
       canvas.off('mouse:up', handleObjectMouseUp);
       
       // Canvas panning events
@@ -342,7 +335,6 @@ export const Canvas: React.FC<CanvasProps> = ({
     handleObjectSelection,
     handleCanvasClick,
     handleObjectMoving,
-    handleObjectModified,
     handleObjectMouseUp,
     handleMouseWheel,
     handleCanvasMouseDown,
@@ -350,56 +342,59 @@ export const Canvas: React.FC<CanvasProps> = ({
     handleCanvasMouseUp,
   ]);
 
-  // Handle keyboard events for deletion
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObject) {
-        e.preventDefault();
-        dispatch(deleteObject(selectedObject.id));
-      }
-    };
+  // MVP: Delete functionality removed (will be added post-MVP)
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [selectedObject, dispatch]);
-
-  // Add rectangle function
-  const handleAddRectangle = useCallback(() => {
-    const center = calculateViewportCenter(viewport, width, height);
+  // Add rectangle function (Firebase-first: Firebase is single source of truth)
+  const handleAddRectangle = useCallback(async () => {
+    if (!user) return;
     
-    // Check for overlaps with new rectangle position
-    const tempRect: Rectangle = {
+    // Calculate position at center of creator's current viewport
+    const center = calculateViewportCenter(viewport, width, height);
+    const rectX = center.x - CANVAS_CONFIG.DEFAULT_RECTANGLE_WIDTH / 2;
+    const rectY = center.y - CANVAS_CONFIG.DEFAULT_RECTANGLE_HEIGHT / 2;
+    
+    // Create the new rectangle using our utility function
+    const newRectangle = createRectangle(rectX, rectY, user.uid, objects);
+    
+    // Check for overlaps (temporary rectangle for overlap detection only)
+    const tempRect = {
       id: 'temp',
-      type: 'rectangle',
-      x: center.x - CANVAS_CONFIG.DEFAULT_RECTANGLE_WIDTH / 2,
-      y: center.y - CANVAS_CONFIG.DEFAULT_RECTANGLE_HEIGHT / 2,
+      type: 'rectangle' as const,
+      x: rectX,
+      y: rectY,
       width: CANVAS_CONFIG.DEFAULT_RECTANGLE_WIDTH,
       height: CANVAS_CONFIG.DEFAULT_RECTANGLE_HEIGHT,
       fill: 'temp',
       stroke: 'black',
       strokeWidth: 1,
       opacity: 1.0,
-      rotation: 0, // No rotation for new rectangle
+      rotation: 0,
       zIndex: 0,
       createdAt: 0,
       updatedAt: 0,
+      lastModifiedBy: user.uid,
     };
 
     const overlapping = findOverlappingObjects(tempRect, objects);
-    
-    dispatch(addRectangle({
-      x: center.x - CANVAS_CONFIG.DEFAULT_RECTANGLE_WIDTH / 2,
-      y: center.y - CANVAS_CONFIG.DEFAULT_RECTANGLE_HEIGHT / 2,
-    }));
 
-    // Show notification if overlaps detected
-    if (overlapping.length > 0 && onNotification) {
-      onNotification(
-        'Shape overlaps with existing object and has been brought to front',
-        'info'
-      );
+    // Firebase-first: Create in Firebase only - real-time listener will update all clients
+    try {
+      await addObject(newRectangle);
+      
+      // Show notification if overlaps detected
+      if (overlapping.length > 0 && onNotification) {
+        onNotification(
+          'Shape overlaps with existing object and has been brought to front',
+          'info'
+        );
+      }
+    } catch (error) {
+      console.error('Failed to create rectangle in Firebase:', error);
+      if (onNotification) {
+        onNotification('Failed to create rectangle', 'error');
+      }
     }
-  }, [viewport, width, height, objects, dispatch, onNotification]);
+  }, [viewport, width, height, objects, onNotification, user, addObject]);
 
   // Expose add rectangle function
   useEffect(() => {
@@ -419,6 +414,15 @@ export const Canvas: React.FC<CanvasProps> = ({
       {/* Viewport info overlay (development) */}
       <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
         Viewport: {Math.round(viewport.x)}, {Math.round(viewport.y)} | Zoom: {Math.round(viewport.zoom * 100)}%
+      </div>
+      
+      {/* Sync status indicator */}
+      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium ${
+        isConnected 
+          ? 'bg-green-100 text-green-800 border border-green-200' 
+          : 'bg-red-100 text-red-800 border border-red-200'
+      }`}>
+        {isConnected ? '🟢 Synced' : '🔴 Offline'}
       </div>
     </div>
   );

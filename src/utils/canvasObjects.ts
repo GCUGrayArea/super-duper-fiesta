@@ -34,12 +34,14 @@ export function calculateNextZIndex(existingObjects: CanvasObject[]): number {
  * Create a new rectangle with default properties
  * @param x - X position
  * @param y - Y position 
+ * @param userId - ID of user creating the object (for lastModifiedBy)
  * @param existingObjects - Existing objects for z-index calculation
  * @returns New Rectangle object
  */
 export function createRectangle(
   x: number, 
   y: number, 
+  userId: string,
   existingObjects: CanvasObject[] = []
 ): Rectangle {
   const now = Date.now();
@@ -59,6 +61,7 @@ export function createRectangle(
     zIndex: calculateNextZIndex(existingObjects),
     createdAt: now,
     updatedAt: now,
+    lastModifiedBy: userId,
   };
 }
 

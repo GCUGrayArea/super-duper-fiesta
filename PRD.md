@@ -48,8 +48,7 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
   * Button to create a rectangle at the **center of current viewport**.
 * **Object operations:**
 
-  * Move and resize rectangles.
-  * Delete objects.
+  * Move rectangles (position only).
   * Pan by dragging with no object selected.
   * Zoom with scroll wheel.
   
@@ -108,7 +107,9 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 
 | Category                         | Description                                                                  |
 | -------------------------------- | ---------------------------------------------------------------------------- |
-| **AI Commands**                  | Natural language canvas manipulation (“Create a blue rectangle,” etc.).      |
+| **Object Manipulation**          | Resize, rotate, or delete rectangles (MVP supports position movement only).  |
+| **Advanced Interactions**        | Click-and-drag behavior (MVP requires click-to-select then drag-to-move).   |
+| **AI Commands**                  | Natural language canvas manipulation ("Create a blue rectangle," etc.).      |
 | **Advanced Shapes / Components** | Circles, polygons, custom paths, images, or complex components.              |
 | **Grouping / Alignment Tools**   | Align, distribute, or grid arrangement features.                             |
 | **Undo / Redo**                  | Full history or time-travel editing.                                         |
@@ -134,9 +135,10 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 
 ## **7. Summary of MVP Deliverable**
 
-**What “Done” Means:**
+**What "Done" Means:**
 ✅ Single shared 5,000×5,000 px canvas
 ✅ Rectangle shape creation via button (centered on viewport)
+✅ Move rectangles (position only)
 ✅ Pan and zoom
 ✅ Real-time sync between 2+ users
 ✅ Multiplayer cursors with names
@@ -151,9 +153,11 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 
 | Phase                                   | Feature                     | Description                                                                        | Priority |
 | --------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------- | -------- |
-| **Phase 2: Multi-Canvas Collaboration** | Canvas “rooms”              | Allow multiple canvases/projects with joinable links; separate real-time sessions. | High     |
+| **Phase 2: Core Object Manipulation**  | Resize, rotate, delete      | Add object resizing, rotation controls, and deletion functionality.               | High     |
+| **Phase 2: Enhanced Interactions**     | Click-and-drag behavior     | Implement immediate drag on click (vs. current click-to-select then drag).       | Medium   |
+| **Phase 2: Multi-Canvas Collaboration** | Canvas "rooms"              | Allow multiple canvases/projects with joinable links; separate real-time sessions. | High     |
 | **Phase 2: Shape Expansion**            | Circles, text layers        | Introduce new object types and transformations.                                    | High     |
 | **Phase 3: Enhanced Editing**           | Undo/Redo, grouping         | Add editing history and grouping functionality.                                    | Medium   |
-| **Phase 3: AI Integration**             | Natural language commands   | Implement AI agent for canvas manipulation (“Create a login form,” etc.).          | High     |
+| **Phase 3: AI Integration**             | Natural language commands   | Implement AI agent for canvas manipulation ("Create a login form," etc.).          | High     |
 | **Phase 4: User Experience**            | Export, sharing permissions | Enable export (SVG/PNG), user roles, and private canvases.                         | Medium   |
 | **Phase 4: Performance Scaling**        | Optimized rendering         | Handle 10+ users and 1,000+ objects with stable performance.                       | Medium   |

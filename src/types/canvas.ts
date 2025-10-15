@@ -9,6 +9,7 @@ export interface BaseCanvasObject {
   zIndex: number; // Layer ordering
   createdAt: number; // Timestamp
   updatedAt: number; // Timestamp
+  lastModifiedBy: string; // User ID who last modified this object (for echo prevention)
 }
 
 // Rectangle object interface
@@ -49,6 +50,8 @@ export const CANVAS_CONFIG = {
   DEFAULT_VIEWPORT_X: 2500, // Center of world
   DEFAULT_VIEWPORT_Y: 2500, // Center of world
   MOVEMENT_THRESHOLD: 5, // 5px threshold for sync (Phase 4)
+  SIZE_THRESHOLD: 5, // 5px threshold for size changes (Phase 4)
+  ROTATION_THRESHOLD: 5, // 5 degree threshold for rotation changes (Phase 4)
   DEFAULT_RECTANGLE_WIDTH: 150,
   DEFAULT_RECTANGLE_HEIGHT: 150,
 } as const;
@@ -58,5 +61,22 @@ export function isRectangle(obj: CanvasObject): obj is Rectangle {
   return obj.type === 'rectangle';
 }
 
+// Firestore canvas document structure for Phase 4 sync
+export interface CanvasDocument {
+  id: string; // Canvas ID (e.g., "main")
+  objects: CanvasObject[]; // Array of all canvas objects
+  lastUpdated: number; // Timestamp of last update
+  createdBy: string; // User ID who created the canvas
+  createdAt: number; // Canvas creation timestamp
+}
+
+// Object locking for Phase 5 multiplayer (preparation)
+export interface ObjectLock {
+  objectId: string; // ID of locked object
+  userId: string; // ID of user who locked it
+  displayName: string; // Display name of user who locked it
+  timestamp: number; // When the lock was acquired
+}
+
 // Utility type for object creation (without computed fields)
-export type CreateRectangleData = Omit<Rectangle, 'id' | 'createdAt' | 'updatedAt' | 'zIndex'>;
+export type CreateRectangleData = Omit<Rectangle, 'id' | 'createdAt' | 'updatedAt' | 'zIndex' | 'lastModifiedBy'>;

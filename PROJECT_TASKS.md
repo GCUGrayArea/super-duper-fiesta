@@ -279,11 +279,13 @@ Phase 4: Real-Time Synchronization
  Design Firestore document structure:
 
 Collection: canvases
-Document ID: main (single shared canvas)
-Fields: objects (array), lastUpdated (timestamp)
+Document ID: main (single shared canvas for MVP, but support multiple canvases as scaffold for future)
+Fields: objects (array of CanvasObject), lastUpdated (timestamp), createdBy (string), createdAt (timestamp)
 
 
- Create utility functions for Firestore operations
+ Create NEW utility functions for Firestore operations (don't adapt existing db.ts - start fresh)
+ Use Phase 3 CanvasObject/Rectangle types for maximum extensibility (Circle, Textbox later)
+ Support multiple canvas IDs in Firebase structure but only use "main" canvas for MVP
  Implement Firestore security rules for authenticated users
  Write unit tests for Firestore utility functions (with mocked Firestore)
 
@@ -298,32 +300,38 @@ Fields: objects (array), lastUpdated (timestamp)
  Write unit tests for Firestore sync functions (with mocked Firestore)
  Write unit tests for connection event handlers
 
-4.3 Optimized Update Strategy
+4.3 Optimized Update Strategy & Locking
 
- Implement position change detection (>5px threshold)
- Implement size change detection (>5px threshold)
- Track last sync position/size for threshold calculation
- Batch updates on mouseup event
- Send immediate update if threshold exceeded during drag
+ Implement object locking on edit start (mousedown/resize start) - dispatch immediately to gray out object for others
+ Implement position change detection (>5px threshold) - below threshold snaps back to original position  
+ Implement size change detection (>5px threshold) - below threshold snaps back to original size
+ Implement rotation change detection (>5 degree threshold) - below threshold snaps back to original rotation
+ Track last sync position/size/rotation for threshold calculation
+ Send actual edit updates only on mouseup event (when edit completes and passes thresholds)
+ Release object lock on mouseup event
  Optimize update payload to include only changed fields
  Target <100ms sync latency
- Write unit tests for position change threshold (4px = no sync, 6px = sync)
+ Write unit tests for position change threshold (4px = no sync/snap back, 6px = sync)
  Write unit tests for size change threshold detection
+ Write unit tests for rotation change threshold detection
  Write unit tests for last sync state tracking
  Write unit tests for update payload construction (only changed fields)
+ Write unit tests for lock/unlock behavior during edit operations
 
 4.4 State Reconciliation
 
  Handle incoming updates from Firestore listener
  Merge remote changes with local state
- Prevent echo updates (ignore updates from current user)
+ Prevent echo updates (ignore updates from current user to avoid circular updates when Firestore sends back changes the current user made)
+ Track which user made each change (add lastModifiedBy field to objects)
  Resolve conflicts with last-write-wins strategy
- Update Fabric.js canvas objects from Firestore changes
+ Update Fabric.js canvas objects from Firestore changes (but not for locked objects)
  Implement reconnection logic with full state reload
  Handle array index synchronization for object updates
- Write unit tests for echo update prevention
+ Write unit tests for echo update prevention (current user's changes ignored when received back)
  Write unit tests for state merging logic (local + remote changes)
  Write unit tests for conflict resolution (last-write-wins)
+ Write unit tests for locked object update prevention
 
 4.5 Sync Testing - 2 Users
 
@@ -809,12 +817,14 @@ Common Pitfalls to Avoid
 
     Don't skip Phase 3 testing: Sync issues are much harder to debug than local issues
     Don't sync every single mouse movement (use thresholds)
+    Don't sync while editing - only lock on start, sync on complete (mouseup)
     Don't forget .onDisconnect() cleanup for presence and locks
     Don't render cursors for the current user
     Don't ignore the 5,000×5,000 canvas boundary
     Don't forget to update zIndex when objects are dragged
-    Don't send echo updates back to the user who made the change
+    Don't send echo updates back to the user who made the change (track lastModifiedBy)
     Don't add Firebase integration until Phase 3 is complete and tested
+    Don't allow threshold-failing edits to sync (snap back to original position/size/rotation)
 
 Testing Strategy by Phase
 
