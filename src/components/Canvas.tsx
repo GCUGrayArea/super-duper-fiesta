@@ -12,6 +12,7 @@ import {
   zoomViewport
 } from '../store/canvasSlice';
 import { selectUser } from '../store/authSlice';
+import { selectUsersWithCursors } from '../store/presenceSlice';
 import { CANVAS_CONFIG, Rectangle, isRectangle } from '../types/canvas';
 import { calculateViewportCenter, findOverlappingObjects, createRectangle } from '../utils/canvasObjects';
 import { useCanvasSync } from '../hooks/useCanvasSync';
@@ -20,24 +21,32 @@ interface CanvasProps {
   width?: number;
   height?: number;
   onNotification?: (message: string, type?: 'info' | 'warning' | 'error' | 'success') => void;
+  onMouseMove?: (event: MouseEvent) => void; // Phase 5: Cursor tracking
+  onMouseLeave?: () => void; // Phase 5: Cursor tracking
+  onUserActivity?: () => Promise<void>; // Phase 5: Activity tracking
 }
 
 export const Canvas: React.FC<CanvasProps> = ({
   width = CANVAS_CONFIG.VIEWPORT_WIDTH,
   height = CANVAS_CONFIG.VIEWPORT_HEIGHT,
   onNotification,
+  onMouseMove,
+  onMouseLeave,
+  onUserActivity,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
   const isPanningRef = useRef(false);
   const lastPanPointRef = useRef<{ x: number; y: number } | null>(null);
   const isInternalSelectionRef = useRef(false); // Flag to prevent infinite loops
+  const cursorsRef = useRef<Map<string, fabric.Circle>>(new Map()); // Track cursor objects by user ID
 
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser);
   const objects = useAppSelector(selectCanvasObjects);
   const viewport = useAppSelector(selectViewport);
   const selection = useAppSelector(selectSelection);
+  const usersWithCursors = useAppSelector(selectUsersWithCursors);
 
   // Phase 4: Canvas sync integration
   const { isConnected, syncObject, addObject } = useCanvasSync({
@@ -45,6 +54,116 @@ export const Canvas: React.FC<CanvasProps> = ({
     user: user!,
     enabled: !!user
   });
+
+  // Create a cursor object for a user
+  const createCursorObject = useCallback((userId: string, userName: string, userColor: string): fabric.Circle => {
+    try {
+      const cursor = new fabric.Circle({
+        radius: 8,
+        fill: userColor,
+        stroke: '#ffffff',
+        strokeWidth: 2,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+        shadow: new fabric.Shadow({
+          color: 'rgba(0,0,0,0.3)',
+          blur: 4,
+          offsetX: 0,
+          offsetY: 2,
+        })
+      });
+
+      // Add text label with user name - positioned below the cursor
+      const text = new fabric.Text(userName, {
+        fontSize: 10,
+        fill: '#000000',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        originX: 'center',
+        originY: 'top',
+        top: 12, // Position below the cursor circle (radius 8 + 4px gap)
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+        backgroundColor: 'rgba(255, 255, 255, 0.9)', // White background for readability
+        padding: 2,
+      });
+
+      // Group cursor circle and text
+      const cursorGroup = new fabric.Group([cursor, text], {
+        left: 0,
+        top: 0,
+        selectable: false,
+        evented: false,
+        excludeFromExport: true,
+      });
+
+      // Store user ID for identification
+      (cursorGroup as any).userId = userId;
+      (cursorGroup as any).isCursor = true;
+
+      return cursorGroup as any;
+    } catch (error) {
+      console.error(`Error in createCursorObject:`, error);
+      throw error;
+    }
+  }, []);
+
+  // Update cursor positions based on current users with cursors
+  const updateCursors = useCallback(() => {
+    const canvas = fabricCanvasRef.current;
+    if (!canvas || !user) {
+      return;
+    }
+
+    // Get current cursor objects
+    const currentCursors = cursorsRef.current;
+
+    // usersWithCursors now contains only other users' cursors from simplified state
+    const otherUsers = usersWithCursors.filter(u => u.x >= 0 && u.y >= 0);
+
+    // Remove cursors for users who are no longer visible
+    currentCursors.forEach((cursorObj, userId) => {
+      const userStillVisible = otherUsers.find(u => u.uid === userId);
+      if (!userStillVisible) {
+        canvas.remove(cursorObj);
+        currentCursors.delete(userId);
+      }
+    });
+
+    // Add or update cursors for visible other users  
+    otherUsers.forEach(userCursor => {
+      const { uid, displayName, color, x, y } = userCursor;
+
+      let cursorObj = currentCursors.get(uid);
+      
+      // Create cursor if it doesn't exist
+      if (!cursorObj) {
+        try {
+          cursorObj = createCursorObject(uid, displayName, color);
+          canvas.add(cursorObj);
+          currentCursors.set(uid, cursorObj);
+        } catch (error) {
+          console.error(`Failed to create cursor object:`, error);
+          return;
+        }
+      }
+
+      // Update cursor position (coordinates are already in world space)
+      try {
+        cursorObj.set({
+          left: x,
+          top: y,
+        });
+        cursorObj.setCoords();
+      } catch (error) {
+        console.error(`Failed to update cursor position:`, error);
+      }
+    });
+
+    canvas.requestRenderAll();
+  }, [usersWithCursors, user, createCursorObject]);
 
   // Initialize Fabric.js canvas
   useEffect(() => {
@@ -66,6 +185,8 @@ export const Canvas: React.FC<CanvasProps> = ({
     updateFabricViewport(canvas, viewport);
 
     return () => {
+      // Clear all cursors
+      cursorsRef.current.clear();
       canvas.dispose();
       fabricCanvasRef.current = null;
     };
@@ -130,11 +251,19 @@ export const Canvas: React.FC<CanvasProps> = ({
     const canvas = fabricCanvasRef.current;
     if (!canvas) return;
 
+    // Preserve cursor objects before clearing
+    const existingCursors: fabric.Object[] = [];
+    canvas.getObjects().forEach(obj => {
+      if ((obj as any).isCursor) {
+        existingCursors.push(obj);
+      }
+    });
+
     // Clear existing objects
     canvas.clear();
     canvas.backgroundColor = '#f8f9fa';
 
-    // Add objects sorted by z-index
+    // Add objects sorted by z-index first
     const sortedObjects = [...objects].sort((a, b) => a.zIndex - b.zIndex);
     
     sortedObjects.forEach(obj => {
@@ -142,6 +271,11 @@ export const Canvas: React.FC<CanvasProps> = ({
         const fabricObj = createFabricObject(obj);
         canvas.add(fabricObj);
       }
+    });
+
+    // Re-add preserved cursor objects after shapes (so they appear on top)
+    existingCursors.forEach(cursor => {
+      canvas.add(cursor);
     });
 
     // Update selection (prevent infinite loop with internal flag)
@@ -162,7 +296,15 @@ export const Canvas: React.FC<CanvasProps> = ({
     }, 0);
 
     canvas.requestRenderAll();
-  }, [objects, selection.selectedObjectId, createFabricObject]);
+    
+    // Update cursors after objects are synced
+    updateCursors();
+  }, [objects, selection.selectedObjectId, createFabricObject, updateCursors]);
+
+  // Update cursors when users with cursors change
+  useEffect(() => {
+    updateCursors();
+  }, [usersWithCursors, updateCursors]);
 
   // Handle object selection
   const handleObjectSelection = useCallback((e: any) => {
@@ -172,6 +314,11 @@ export const Canvas: React.FC<CanvasProps> = ({
     }
     
     const target = e.target || e.selected?.[0];
+    // Skip cursor objects
+    if (target && (target as any).isCursor) {
+      return;
+    }
+    
     if (target && (target as any).objectId) {
       const objectId = (target as any).objectId;
       dispatch(selectObject(objectId));
@@ -186,6 +333,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleCanvasClick = useCallback((e: any) => {
     // Skip if this is an internal operation
     if (isInternalSelectionRef.current) {
+      return;
+    }
+    
+    // Skip cursor objects - don't deselect when clicking on cursor
+    if (e.target && (e.target as any).isCursor) {
       return;
     }
     
@@ -225,6 +377,15 @@ export const Canvas: React.FC<CanvasProps> = ({
         userId: user.uid,
       }));
       
+      // Phase 5: Track user activity on object edit
+      if (onUserActivity) {
+        try {
+          await onUserActivity();
+        } catch (error) {
+          console.error('Failed to update user activity:', error);
+        }
+      }
+      
       // Sync with thresholds
       try {
         await syncObject(objectId, updates);
@@ -232,7 +393,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         console.error('Failed to sync object position:', error);
       }
     }
-  }, [dispatch, user, syncObject]);
+  }, [dispatch, user, syncObject, onUserActivity]);
 
   // Handle mouse wheel for zooming
   const handleMouseWheel = useCallback((e: any) => {
@@ -261,6 +422,11 @@ export const Canvas: React.FC<CanvasProps> = ({
   const handleCanvasMouseDown = useCallback((e: any) => {
     const event = e.e as MouseEvent;
     
+    // Skip cursor objects for panning
+    if (e.target && (e.target as any).isCursor) {
+      return;
+    }
+    
     // Only start panning if clicking empty area (no target object)
     if (!e.target && !e.subTargets?.length) {
       isPanningRef.current = true;
@@ -275,16 +441,23 @@ export const Canvas: React.FC<CanvasProps> = ({
 
   // Handle mouse move for panning (only when panning is active)
   const handleCanvasMouseMove = useCallback((e: any) => {
+    const event = e.e as MouseEvent;
+
+    // Phase 5: Always call cursor tracking (if provided)
+    if (onMouseMove) {
+      onMouseMove(event);
+    }
+
+    // Continue with panning logic only if panning is active
     if (!isPanningRef.current || !lastPanPointRef.current) return;
 
-    const event = e.e as MouseEvent;
     const deltaX = (lastPanPointRef.current.x - event.clientX) / viewport.zoom;
     const deltaY = (lastPanPointRef.current.y - event.clientY) / viewport.zoom;
 
     dispatch(panViewport({ deltaX, deltaY }));
 
     lastPanPointRef.current = { x: event.clientX, y: event.clientY };
-  }, [dispatch, viewport.zoom]);
+  }, [dispatch, viewport.zoom, onMouseMove]);
 
   // Handle mouse up for panning
   const handleCanvasMouseUp = useCallback(() => {
@@ -296,6 +469,14 @@ export const Canvas: React.FC<CanvasProps> = ({
       fabricCanvasRef.current.hoverCursor = 'move';
     }
   }, []);
+
+  // Handle mouse leave for cursor tracking
+  const handleCanvasMouseLeave = useCallback(() => {
+    // Phase 5: Call cursor tracking mouse leave (if provided)
+    if (onMouseLeave) {
+      onMouseLeave();
+    }
+  }, [onMouseLeave]);
 
   // Add Fabric.js event listeners (MVP: selection and movement only)
   useEffect(() => {
@@ -316,6 +497,9 @@ export const Canvas: React.FC<CanvasProps> = ({
     canvas.on('mouse:move', handleCanvasMouseMove);
     canvas.on('mouse:up', handleCanvasMouseUp);
 
+    // Phase 5: Mouse leave for cursor tracking
+    canvas.on('mouse:out', handleCanvasMouseLeave);
+
     return () => {
       canvas.off('selection:created', handleObjectSelection);
       canvas.off('selection:updated', handleObjectSelection);
@@ -330,6 +514,9 @@ export const Canvas: React.FC<CanvasProps> = ({
       canvas.off('mouse:down', handleCanvasMouseDown);
       canvas.off('mouse:move', handleCanvasMouseMove);
       canvas.off('mouse:up', handleCanvasMouseUp);
+      
+      // Phase 5: Mouse leave
+      canvas.off('mouse:out', handleCanvasMouseLeave);
     };
   }, [
     handleObjectSelection,
@@ -340,6 +527,7 @@ export const Canvas: React.FC<CanvasProps> = ({
     handleCanvasMouseDown,
     handleCanvasMouseMove,
     handleCanvasMouseUp,
+    handleCanvasMouseLeave,
   ]);
 
   // MVP: Delete functionality removed (will be added post-MVP)
@@ -381,6 +569,15 @@ export const Canvas: React.FC<CanvasProps> = ({
     try {
       await addObject(newRectangle);
       
+      // Phase 5: Track user activity on object creation
+      if (onUserActivity) {
+        try {
+          await onUserActivity();
+        } catch (error) {
+          console.error('Failed to update user activity:', error);
+        }
+      }
+      
       // Show notification if overlaps detected
       if (overlapping.length > 0 && onNotification) {
         onNotification(
@@ -394,7 +591,7 @@ export const Canvas: React.FC<CanvasProps> = ({
         onNotification('Failed to create rectangle', 'error');
       }
     }
-  }, [viewport, width, height, objects, onNotification, user, addObject]);
+  }, [viewport, width, height, objects, onNotification, user, addObject, onUserActivity]);
 
   // Expose add rectangle function
   useEffect(() => {
@@ -412,12 +609,12 @@ export const Canvas: React.FC<CanvasProps> = ({
       />
       
       {/* Viewport info overlay (development) */}
-      <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+      <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded z-50">
         Viewport: {Math.round(viewport.x)}, {Math.round(viewport.y)} | Zoom: {Math.round(viewport.zoom * 100)}%
       </div>
       
       {/* Sync status indicator */}
-      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium ${
+      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium z-50 ${
         isConnected 
           ? 'bg-green-100 text-green-800 border border-green-200' 
           : 'bg-red-100 text-red-800 border border-red-200'

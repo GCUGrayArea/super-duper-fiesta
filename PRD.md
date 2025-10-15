@@ -66,11 +66,11 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 * **Presence awareness:** Display list of online users.
 * **Conflict handling:**
 
-  * **First-mover lock system:**
+  * **Second-mover wins system:**
 
-    * When a user starts editing an object, it becomes **locked** for others.
-    * Locked objects appear **grayed or desaturated**.
-    * The lock releases on **edit end (mouse up)** or after **5 seconds of inactivity**.
+    * Multiple users can edit the same object simultaneously.
+    * Conflicts are resolved by applying the most recent edit (last-write-wins).
+    * No object locking required for MVP - simplified conflict resolution.
 * **Persistence:** Canvas state stable across disconnects.
 * **Performance targets:**
 
@@ -118,6 +118,7 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 | **Mobile Responsiveness**        | Desktop web only for MVP.                                                    |
 | **Access Control**               | Canvas sharing permissions or role management.                               |
 | **Multi-Canvas Rooms**           | Only one shared global canvas for MVP. Multi-room support planned for later. |
+| **Object Locking System**        | First-mover lock system where objects become locked during editing. Grayed out visual indicators for locked objects. Auto-release after inactivity. |
 
 ---
 
@@ -126,7 +127,7 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 | Risk                                  | Description                                                           | Mitigation                                                                            |
 | ------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | **Real-time performance degradation** | Too many update broadcasts can cause jitter or lag.                   | Use debounced updates for cursor positions and delta-based object sync.               |
-| **Lock management conflicts**         | Overlapping locks or failure to release after disconnect.             | Implement dual unlock (on edit end or 5 s inactivity). Log lock events for debugging. |
+| **Edit conflict resolution**          | Multiple users editing same object simultaneously may cause conflicts.  | Use last-write-wins strategy with proper timestamp tracking. Monitor for user experience issues. |
 | **Persistence complexity**            | Syncing state between transient real-time updates and saved DB state. | Use Firestore listeners; save periodically and on disconnect.                         |
 | **Authentication latency**            | Auth initialization delay before presence tracking.                   | Preload auth before workspace entry; cache tokens locally.                            |
 | **Scalability (5+ users)**            | Performance may degrade with multiple concurrent edits.               | Simulate loads early; throttle update frequency for heavy scenes.                     |
@@ -143,7 +144,7 @@ The MVP’s purpose is to prove the stability of the **multiplayer foundation** 
 ✅ Real-time sync between 2+ users
 ✅ Multiplayer cursors with names
 ✅ Presence awareness
-✅ Conflict-free editing using first-mover lock system
+✅ Conflict-free editing using last-write-wins resolution
 ✅ Authentication (email + guest)
 ✅ Deployed, public, stable, and fast
 

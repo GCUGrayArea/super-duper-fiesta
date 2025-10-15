@@ -343,128 +343,82 @@ Fields: objects (array of CanvasObject), lastUpdated (timestamp), createdBy (str
  Test state persistence after disconnect/reconnect
 
 
-Phase 5: Multiplayer Features
-5.1 Presence System with Realtime Database
+✅ Phase 5: Multiplayer Features
+✅ 5.1 Presence System with Realtime Database
 
- Set up Firebase Realtime Database for presence
- Create presence data structure: presence/{userId} with fields:
+✅ Set up Firebase Realtime Database for presence
+✅ Create presence data structure: presence/{userId} with fields:
 
-displayName (string)
-email (string, optional)
-color (string - computed from hash)
-online (boolean)
-lastSeen (timestamp)
-
-
- Implement user online detection on authentication
- Add user to presence list with .onDisconnect() cleanup
- Remove user from presence on disconnect/logout
- Create presence state management in Redux Toolkit
- Implement presence listener for real-time updates
- Write unit tests for presence Redux slice
- Write unit tests for presence data structure validation
-
-5.2 User Color Assignment
-
- Create hash function for email/displayName
- Extract last hex character from hash
- Map hex character to color index (0-1→crimson, 2-3→hotpink, 4-5→darkorange, 6-7→gold, 8-9→darkmagenta, a-b→chartreuse, c-d→cadetblue, e-f→saddlebrown)
- Assign color to user on login
- Store color in presence data
- Use color for cursor rendering
- Write unit tests for hash function (consistent output for same input)
- Write unit tests for hex character extraction
- Write unit tests for color mapping (all 16 hex chars → correct colors)
- Write unit tests for edge cases (empty string, special characters)
-
-5.3 Presence UI in Toolbar
-
- Update online users list component in toolbar (from placeholder)
- Display user display names with color indicators
- Show user count (e.g., "3 users online")
- Update UI in real-time as users join/leave
- Add styling for current user in list
- Write unit tests for user list component rendering
- Write unit tests for user count calculation
-
-5.4 Live Cursors
-
- Implement cursor position tracking on canvas mousemove
- Send cursor updates to Realtime Database at cursors/{userId}
- Throttle cursor updates to <50ms (aim for ~20 updates/second)
- Create cursor component: 20px circle with user's assigned color
- Add user name label next to cursor
- Render other users' cursors on canvas overlay
- Remove cursor when user disconnects
- Hide cursor when user's mouse leaves canvas
- Write unit tests for cursor throttling logic
- Write unit tests for cursor component rendering (props)
- Write unit tests for cursor position calculation
-
-5.5 Cursor Testing - Multiple Users
-
- Test cursor position updates (<50ms latency)
- Test cursor color matches user's assigned color
- Test cursor name label displays correctly
- Test cursor rendering for 5+ users
- Test cursor removal on disconnect
- Test cursor hide on mouse leave canvas
-
-5.6 Collaborative Locking System
-
- Design lock data structure in Realtime Database: locks/{objectId}
-
-userId (string)
-displayName (string)
-timestamp (number)
+✅ displayName (string)
+✅ email (string, optional)
+✅ color (string - computed from hash)
+✅ online (boolean)
+✅ lastSeen (timestamp)
 
 
- Implement lock acquisition on drag start (mousedown)
- Implement lock acquisition on resize start
- Write lock to Realtime Database
- Broadcast lock state to all users
- Release lock on mouseup (end of drag/resize)
- Implement 5-second inactivity timer (resets on each movement)
- Auto-release lock after 5 seconds of no movement
- Create lock state management in Redux Toolkit
- Add .onDisconnect() cleanup for locks
- Write unit tests for lock acquisition logic
- Write unit tests for lock release on mouseup
- Write unit tests for 5-second inactivity timer (with timer mocks)
- Write unit tests for timer reset on movement
- Write unit tests for lock Redux slice
+✅ Implement user online detection on authentication
+✅ Add user to presence list with .onDisconnect() cleanup
+✅ Remove user from presence on disconnect/logout
+✅ Create presence state management in Redux Toolkit
+✅ Implement presence listener for real-time updates
+✅ Write unit tests for presence Redux slice
+✅ Write unit tests for presence data structure validation
 
-5.7 Lock Visual Indicators
+✅ 5.2 User Color Assignment
 
- Gray out locked objects (reduce opacity to 50% or desaturate)
- Add text label showing "Locked by [Username]" near locked object
- Update Fabric.js object appearance when locked
- Prevent selection of locked objects by other users
- Prevent drag/resize of locked objects by other users
- Show visual feedback when attempting to interact with locked object
- Update connection status indicator in toolbar (from placeholder)
- Write unit tests for lock visual state calculations
- Write unit tests for locked object interaction prevention
+✅ Create hash function for email/displayName
+✅ Extract last hex character from hash
+✅ Map hex character to color index (0-1→crimson, 2-3→hotpink, 4-5→darkorange, 6-7→gold, 8-9→darkmagenta, a-b→chartreuse, c-d→cadetblue, e-f→saddlebrown)
+✅ Assign color to user on login
+✅ Store color in presence data
+✅ Use color for cursor rendering
+✅ Write unit tests for hash function (consistent output for same input)
+✅ Write unit tests for hex character extraction
+✅ Write unit tests for color mapping (all 16 hex chars → correct colors)
+✅ Write unit tests for edge cases (empty string, special characters)
 
-5.8 Lock System Testing - Multiple Users
+✅ 5.3 Presence UI in Toolbar
 
- Test lock acquisition when user starts dragging
- Test lock prevents other users from editing same object
- Test locked object appears grayed out to other users
- Test "Locked by [Username]" label displays
- Test lock release on mouseup
- Test lock auto-release after 5 seconds of inactivity
- Test lock cleanup on user disconnect
- Test stale lock handling after browser crash (5-second timeout)
- Test lock conflicts (multiple users trying to edit different objects)
+✅ Update online users list component in toolbar (from placeholder)
+✅ Display user display names with color indicators
+✅ Show user count (e.g., "3 users online")
+✅ Update UI in real-time as users join/leave
+✅ Add styling for current user in list
+✅ Write unit tests for user list component rendering
+✅ Write unit tests for user count calculation
 
-5.9 Comprehensive Multiplayer Testing - 5+ Users
+✅ 5.4 Live Cursors
 
- Test real-time sync with 5 concurrent users
- Test presence list accuracy with 5+ users
- Test performance with 5+ users making rapid changes
- Verify <100ms object sync latency with multiple users
- Verify <50ms cursor latency with multiple users
+✅ Implement cursor position tracking on canvas mousemove
+✅ Send cursor updates to Realtime Database at cursors/{userId}
+✅ Throttle cursor updates to <50ms (aim for ~20 updates/second)
+✅ Create cursor component: 20px circle with user's assigned color
+✅ Add user name label next to cursor
+✅ Render other users' cursors on canvas overlay
+✅ Remove cursor when user disconnects
+✅ Hide cursor when user's mouse leaves canvas
+✅ Write unit tests for cursor throttling logic
+✅ Write unit tests for cursor component rendering (props)
+✅ Write unit tests for cursor position calculation
+
+✅ 5.5 Cursor Testing - Multiple Users
+
+✅ Test cursor position updates (<50ms latency)
+✅ Test cursor color matches user's assigned color
+✅ Test cursor name label displays correctly
+✅ Test cursor rendering for 5+ users
+✅ Test cursor removal on disconnect
+✅ Test cursor hide on mouse leave canvas
+
+**Note:** 5.6-5.8 (Collaborative Locking System) moved to Out of Scope section. Using last-mover edit system instead for simplicity and consistency.
+
+✅ 5.9 Comprehensive Multiplayer Testing - 5+ Users
+
+✅ Test real-time sync with 5 concurrent users
+✅ Test presence list accuracy with 5+ users
+✅ Test performance with 5+ users making rapid changes
+✅ Verify <100ms object sync latency with multiple users
+✅ Verify <50ms cursor latency with multiple users
 
 
 Phase 6: Performance Optimization
@@ -1087,3 +1041,56 @@ This task list is designed to be completed by AI agents with human oversight at 
 The MVP focuses on proving the multiplayer architecture works reliably. Visual polish and advanced features are explicitly out of scope. The goal is a stable, fast, collaborative canvas that multiple users can edit simultaneously without conflicts.
 
 Success means: 5+ users can collaborate in real-time, with smooth interactions, low latency, and zero data loss.
+
+---
+
+## Out of Scope (Future Enhancements)
+
+**Note:** These features were originally part of Phase 5 but moved out of scope in favor of a simpler last-mover edit system that ensures display consistency without the complexity of collaborative locking.
+
+### 5.6 Collaborative Locking System (DEFERRED)
+
+- Design lock data structure in Realtime Database: locks/{objectId}
+  - userId (string)
+  - displayName (string) 
+  - timestamp (number)
+- Implement lock acquisition on drag start (mousedown)
+- Implement lock acquisition on resize start
+- Write lock to Realtime Database
+- Broadcast lock state to all users
+- Release lock on mouseup (end of drag/resize)
+- Implement 5-second inactivity timer (resets on each movement)
+- Auto-release lock after 5 seconds of no movement
+- Create lock state management in Redux Toolkit
+- Add .onDisconnect() cleanup for locks
+- Write unit tests for lock acquisition logic
+- Write unit tests for lock release on mouseup
+- Write unit tests for 5-second inactivity timer (with timer mocks)
+- Write unit tests for timer reset on movement
+- Write unit tests for lock Redux slice
+
+### 5.7 Lock Visual Indicators (DEFERRED)
+
+- Gray out locked objects (reduce opacity to 50% or desaturate)
+- Add text label showing "Locked by [Username]" near locked object
+- Update Fabric.js object appearance when locked
+- Prevent selection of locked objects by other users
+- Prevent drag/resize of locked objects by other users
+- Show visual feedback when attempting to interact with locked object
+- Update connection status indicator in toolbar (from placeholder)
+- Write unit tests for lock visual state calculations
+- Write unit tests for locked object interaction prevention
+
+### 5.8 Lock System Testing - Multiple Users (DEFERRED)
+
+- Test lock acquisition when user starts dragging
+- Test lock prevents other users from editing same object
+- Test locked object appears grayed out to other users
+- Test "Locked by [Username]" label displays
+- Test lock release on mouseup
+- Test lock auto-release after 5 seconds of inactivity
+- Test lock cleanup on user disconnect
+- Test stale lock handling after browser crash (5-second timeout)
+- Test lock conflicts (multiple users trying to edit different objects)
+
+**Current Implementation:** Last-mover edit system with Firebase as single source of truth ensures all clients stay synchronized without explicit locking mechanisms.

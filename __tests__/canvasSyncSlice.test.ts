@@ -285,3 +285,4 @@ describe('canvasSlice sync functionality', () => {
     });
   });
 });
+

@@ -11,6 +11,7 @@ import {
 import {
   ref,
   set,
+  update,
   onValue,
   onDisconnect,
   Unsubscribe as RTDBUnsubscribe,
@@ -29,8 +30,9 @@ export interface CanvasShape {
   fill: string;
   createdBy: string;
   createdAt: Timestamp;
-  lockedBy?: string;
-  lockedAt?: Timestamp;
+  // Phase 5: Lock system moved to out-of-scope for MVP
+  // lockedBy?: string;
+  // lockedAt?: Timestamp;
 }
 
 // Canvas state interface
@@ -43,16 +45,21 @@ export interface CanvasState {
   lastModified: Timestamp;
 }
 
-// Presence interface for online users
+// Presence interface for online users (Phase 5)
 export interface UserPresence {
   uid: string;
-  displayName: string | null;
-  color: string;
-  cursor?: {
-    x: number;
-    y: number;
-  };
-  lastSeen: number;
+  displayName: string;
+  email: string;
+  color: string; // Computed from email hash
+  lastSeen: number; // Last cursor movement or activity
+  lastActivity: number; // Last login or edit action timestamp
+}
+
+// Cursor position interface
+export interface CursorPosition {
+  x: number; // World coordinates
+  y: number; // World coordinates
+  timestamp: number; // When cursor was last updated
 }
 
 // Get canvas state from Firestore
@@ -158,69 +165,85 @@ export const addShapeToCanvas = async (
   }
 };
 
-// Lock/unlock shape
-export const lockShape = async (
-  canvasId: string,
-  shapeId: string,
-  userId: string
-): Promise<void> => {
-  try {
-    await updateCanvasState(canvasId, {
-      [`shapes.${shapeId}.lockedBy`]: userId,
-      [`shapes.${shapeId}.lockedAt`]: Timestamp.now(),
-    });
-  } catch (error) {
-    console.error('Error locking shape:', error);
-    throw error;
-  }
-};
+// Phase 5: Presence System with 15-minute activity window
 
-export const unlockShape = async (
-  canvasId: string,
-  shapeId: string
-): Promise<void> => {
-  try {
-    await updateCanvasState(canvasId, {
-      [`shapes.${shapeId}.lockedBy`]: null,
-      [`shapes.${shapeId}.lockedAt`]: null,
-    });
-  } catch (error) {
-    console.error('Error unlocking shape:', error);
-    throw error;
-  }
-};
-
-// Presence tracking using Realtime Database
-export const subscribeToPresence = (
+// Add or update user presence (called on login or edit activity)
+export const updateUserPresence = async (
   canvasId: string,
   user: User,
-  userColor: string,
+  userColor: string
+): Promise<void> => {
+  try {
+    const userPresenceRef = ref(rtdb, `presence/${canvasId}/${user.uid}`);
+    const now = Date.now();
+    
+    const userPresence: UserPresence = {
+      uid: user.uid,
+      displayName: user.displayName || user.email, // Use full email if no display name
+      email: user.email,
+      color: userColor,
+      lastSeen: now,
+      lastActivity: now, // Updated on login or edit actions
+    };
+    
+    await set(userPresenceRef, userPresence);
+  } catch (error) {
+    console.error('Error updating user presence:', error);
+    throw error;
+  }
+};
+
+// Subscribe to presence updates for a canvas
+export const subscribeToPresence = (
+  canvasId: string,
   callback: (users: { [uid: string]: UserPresence }) => void
 ): RTDBUnsubscribe => {
   const presenceRef = ref(rtdb, `presence/${canvasId}`);
-  const userPresenceRef = ref(rtdb, `presence/${canvasId}/${user.uid}`);
   
-  // Set user as online
-  const userPresence: UserPresence = {
-    uid: user.uid,
-    displayName: user.displayName || `User ${user.uid.slice(0, 6)}`,
-    color: userColor,
-    lastSeen: Date.now(),
-  };
-  
-  set(userPresenceRef, userPresence);
-  
-  // Set up disconnect cleanup
-  onDisconnect(userPresenceRef).remove();
-  
-  // Listen to all users' presence
   return onValue(presenceRef, (snapshot) => {
     const users = snapshot.val() || {};
+    // Filter will happen in Redux slice based on 15-minute window
     callback(users);
   });
 };
 
-// Update user cursor position
+// Update user's last activity timestamp (called on edit actions)
+export const updateUserActivity = async (
+  canvasId: string,
+  userId: string
+): Promise<void> => {
+  try {
+    const userPresenceRef = ref(rtdb, `presence/${canvasId}/${userId}`);
+    const now = Date.now();
+    
+    // Update only the activity fields, don't overwrite the entire presence
+    await update(userPresenceRef, {
+      lastActivity: now,
+      lastSeen: now,
+    });
+  } catch (error) {
+    console.error('Error updating user activity:', error);
+  }
+};
+
+// Set up presence with disconnect cleanup
+export const initializeUserPresence = (
+  canvasId: string,
+  user: User,
+  userColor: string
+): Promise<void> => {
+  const userPresenceRef = ref(rtdb, `presence/${canvasId}/${user.uid}`);
+  
+  // Set up disconnect cleanup to remove user when they leave
+  onDisconnect(userPresenceRef).remove();
+  
+  // Add user to presence
+  return updateUserPresence(canvasId, user, userColor);
+};
+
+// Phase 5: Cursor Position Tracking (separate from presence)
+
+// Update cursor position with disconnect cleanup
 export const updateCursorPosition = async (
   canvasId: string,
   userId: string,
@@ -228,21 +251,56 @@ export const updateCursorPosition = async (
   y: number
 ): Promise<void> => {
   try {
-    const cursorRef = ref(rtdb, `presence/${canvasId}/${userId}/cursor`);
-    await set(cursorRef, { x, y });
+    const cursorRef = ref(rtdb, `cursors/${canvasId}/${userId}`);
+    const cursorData: CursorPosition = {
+      x,
+      y,
+      timestamp: Date.now(),
+    };
+    
+    // Set up disconnect cleanup for cursor (remove on disconnect)
+    onDisconnect(cursorRef).remove();
+    
+    await set(cursorRef, cursorData);
+    
+    // Also update lastSeen in presence
+    const userPresenceRef = ref(rtdb, `presence/${canvasId}/${userId}`);
+    await update(userPresenceRef, { lastSeen: Date.now() });
   } catch (error) {
-    console.error('Error updating cursor position:', error);
+    console.error('❌ Error updating cursor position:', error);
+    throw error;
   }
 };
 
-// Remove user from presence
+// Subscribe to cursor positions for a canvas
+export const subscribeToCursors = (
+  canvasId: string,
+  callback: (cursors: { [uid: string]: CursorPosition }) => void
+): RTDBUnsubscribe => {
+  const cursorsRef = ref(rtdb, `cursors/${canvasId}`);
+  
+  return onValue(cursorsRef, (snapshot) => {
+    const cursors = snapshot.val() || {};
+    callback(cursors);
+  }, (error) => {
+    console.error('Firebase cursor subscription error:', error);
+  });
+};
+
+// Remove user from presence and cursor tracking
 export const removeUserPresence = async (
   canvasId: string,
   userId: string
 ): Promise<void> => {
   try {
     const userPresenceRef = ref(rtdb, `presence/${canvasId}/${userId}`);
-    await set(userPresenceRef, null);
+    const cursorRef = ref(rtdb, `cursors/${canvasId}/${userId}`);
+    
+    // Remove both presence and cursor data
+    await Promise.all([
+      set(userPresenceRef, null),
+      set(cursorRef, null)
+    ]);
   } catch (error) {
     console.error('Error removing user presence:', error);
   }

@@ -264,3 +264,4 @@ export function getLastSyncedState(
 ): SyncState[string] | null {
   return syncState[objectId] || null;
 }
+

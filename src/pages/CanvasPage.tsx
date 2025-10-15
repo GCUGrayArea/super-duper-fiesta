@@ -2,8 +2,11 @@ import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppSelector } from '../store/hooks';
 import { selectUser } from '../store/authSlice';
-import { selectSelectedObject } from '../store/canvasSlice';
+import { selectSelectedObject, selectViewport } from '../store/canvasSlice';
+import { selectOnlineUsersList, selectOnlineUsersCount, selectPresenceConnection } from '../store/presenceSlice';
 import { Canvas, NotificationOverlay, useNotifications } from '../components';
+import { usePresence, useCursorTracking } from '../hooks';
+import { getComplementaryColor } from '../utils/colorUtils';
 import { CANVAS_CONFIG } from '../types/canvas';
 
 /**
@@ -13,21 +16,44 @@ import { CANVAS_CONFIG } from '../types/canvas';
 export const CanvasPage: React.FC = () => {
   const user = useAppSelector(selectUser);
   const selectedObject = useAppSelector(selectSelectedObject);
+  const viewport = useAppSelector(selectViewport);
+  const onlineUsers = useAppSelector(selectOnlineUsersList);
+  const onlineUsersCount = useAppSelector(selectOnlineUsersCount);
+  const isPresenceConnected = useAppSelector(selectPresenceConnection);
   const { notifications, addNotification, dismissNotification } = useNotifications();
 
   // Use display name if available, otherwise use email address
   const displayName = user?.displayName || user?.email || 'Unknown User';
 
+  // Phase 5: Initialize presence and cursor tracking
+  const { updateActivity } = usePresence({
+    canvasId: 'main', // Use main canvas for MVP
+    user,
+    enabled: !!user
+  });
+
+  const { handleMouseMove, handleMouseLeave } = useCursorTracking({
+    canvasId: 'main',
+    user,
+    viewport,
+    canvasWidth: CANVAS_CONFIG.VIEWPORT_WIDTH,
+    canvasHeight: CANVAS_CONFIG.VIEWPORT_HEIGHT,
+    enabled: !!user
+  });
+
+
   // Handle add rectangle button
-  const handleAddRectangle = useCallback(() => {
+  const handleAddRectangle = useCallback(async () => {
     try {
       if ((window as any).canvasAddRectangle) {
         (window as any).canvasAddRectangle();
+        // Update user activity on edit action
+        await updateActivity();
       }
     } catch (error) {
       console.error('Error adding rectangle:', error);
     }
-  }, []);
+  }, [updateActivity]);
 
 
   return (
@@ -46,7 +72,7 @@ export const CanvasPage: React.FC = () => {
               <span className="text-xs sm:text-sm text-gray-700 hidden sm:inline truncate">
                 Welcome, {displayName}
               </span>
-              <span className="text-xs text-gray-600 sm:hidden truncate">
+              <span className="text-xs text-gray-600 inline sm:hidden truncate">
                 {displayName}
               </span>
               <div 
@@ -87,14 +113,42 @@ export const CanvasPage: React.FC = () => {
                 </button>
               </div>
               
-              <div className="flex items-center space-x-2 sm:space-x-3 text-xs sm:text-sm text-gray-600">
+              <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
+                {/* Online Users List */}
                 <div className="flex items-center space-x-2">
-                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                  <span>Connected</span>
+                  <div className={`w-3 h-3 rounded-full ${isPresenceConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="font-medium">
+                    {onlineUsersCount} user{onlineUsersCount !== 1 ? 's' : ''} online
+                  </span>
+                  {onlineUsersCount > 0 && (
+                    <div className="flex items-center space-x-1 ml-2">
+                      {onlineUsers.slice(0, 3).map((onlineUser) => ( // Show max 3 users with full names
+                        <div
+                          key={onlineUser.uid}
+                          className="flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border border-white shadow-sm"
+                          style={{ 
+                            backgroundColor: onlineUser.color,
+                            color: getComplementaryColor(onlineUser.color as any)
+                          }}
+                          title={`${onlineUser.displayName} ${onlineUser.uid === user?.uid ? '(you)' : ''}`}
+                        >
+                          <div className="w-3 h-3 rounded-full bg-white opacity-60" />
+                          <span className="whitespace-nowrap">
+                            {onlineUser.displayName} {onlineUser.uid === user?.uid ? '(you)' : ''}
+                          </span>
+                        </div>
+                      ))}
+                      {onlineUsersCount > 3 && (
+                        <div className="text-xs text-gray-500 ml-1">
+                          +{onlineUsersCount - 3} more
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 
                 {selectedObject && (
-                  <div className="text-blue-600">
+                  <div className="text-blue-600 font-medium">
                     Selected: Rectangle
                   </div>
                 )}
@@ -108,6 +162,9 @@ export const CanvasPage: React.FC = () => {
               width={CANVAS_CONFIG.VIEWPORT_WIDTH}
               height={CANVAS_CONFIG.VIEWPORT_HEIGHT}
               onNotification={addNotification}
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+              onUserActivity={updateActivity}
             />
           </div>
           

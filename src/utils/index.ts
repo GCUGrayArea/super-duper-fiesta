@@ -1,3 +1,6 @@
 // Export all utilities
-export * from './colorHash';
+export * from './canvasObjects';
 export * from './clearAuthStorage';
+export * from './colorHash';
+export * from './colorUtils';
+export * from './syncHelpers';
