@@ -23,54 +23,7 @@ export const CanvasPage: React.FC = () => {
   const { notifications, addNotification, dismissNotification } = useNotifications();
 
   // Use display name if available, otherwise use email address
-  // Fix potential duplication in display name (e.g., "FirstFirst" -> "First", "g@gg@g" -> "g@g")  
-  const rawDisplayName = user?.displayName || user?.email || 'Unknown User';
-  
-  const displayName = (() => {
-    // For email addresses, check for character-level duplication around the @ symbol
-    if (rawDisplayName.includes('@')) {
-      const allParts = rawDisplayName.split('@');
-      if (allParts.length > 2) {
-        // Handle cases like "g@gg@g" -> ["g", "gg", "g"]
-        const cleanedParts = [];
-        cleanedParts.push(allParts[0]); // Keep first part
-        
-        // For middle parts that might be duplicates, clean them
-        for (let i = 1; i < allParts.length - 1; i++) {
-          const part = allParts[i];
-          const cleanPart = part.replace(/(.)\1+/g, '$1');
-          if (cleanPart && cleanPart !== cleanedParts[cleanedParts.length - 1]) {
-            cleanedParts.push(cleanPart);
-          }
-        }
-        
-        // Add last part (domain)
-        if (allParts[allParts.length - 1]) {
-          cleanedParts.push(allParts[allParts.length - 1]);
-        }
-        
-        return cleanedParts.join('@');
-      } else if (allParts.length === 2) {
-        // Standard email cleaning
-        const [localPart, domain] = allParts;
-        const cleanLocal = localPart.replace(/(.)\1+/g, '$1');
-        const cleanDomain = domain.replace(/(.)\1+/g, '$1');
-        return `${cleanLocal}@${cleanDomain}`;
-      }
-      return rawDisplayName;
-    }
-    
-    // For non-email display names, check for word-level duplication
-    const words = rawDisplayName.split(' ');
-    const cleanWords = [];
-    for (let i = 0; i < words.length; i++) {
-      // Only add word if it's not the same as the previous word
-      if (i === 0 || words[i] !== words[i-1]) {
-        cleanWords.push(words[i]);
-      }
-    }
-    return cleanWords.join(' ');
-  })();
+  const displayName = user?.displayName || user?.email || 'Unknown User';
 
   // Phase 5: Initialize presence and cursor tracking
   const { updateActivity } = usePresence({
@@ -115,12 +68,15 @@ export const CanvasPage: React.FC = () => {
               </h1>
             </div>
             
-            <div className="flex items-center space-x-2 ml-auto">
-              <span className="text-xs sm:text-sm text-gray-700 truncate">
-                <span className="hidden sm:inline">Welcome, </span>{displayName}
+            <div className="flex items-center space-x-2 sm:space-x-3 min-w-0">
+              <span className="text-xs sm:text-sm text-gray-700 hidden sm:inline truncate">
+                Welcome, {displayName}
+              </span>
+              <span className="text-xs text-gray-600 inline sm:hidden truncate">
+                {displayName}
               </span>
               <div 
-                className="w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center text-white font-medium text-xs shrink-0"
+                className="w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-medium text-xs sm:text-sm shrink-0"
                 style={{ backgroundColor: user?.color || '#6b7280' }}
                 title={displayName}
               >
@@ -138,123 +94,67 @@ export const CanvasPage: React.FC = () => {
       </header>
 
       {/* Main canvas area */}
-      <main className="flex-1 flex">
-        {/* Left sidebar - Presence List */}
-        <div className="w-48 max-w-48 bg-white shadow-sm border-r border-gray-200 p-3 flex-shrink-0">
-          <div className="space-y-3">
-            <div className="border-b border-gray-200 pb-2">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Online Users</h3>
-              <div className="flex items-center space-x-2 text-sm">
-                <div className={`w-3 h-3 rounded-full ${isPresenceConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="font-medium text-gray-600">
-                  {onlineUsersCount} user{onlineUsersCount !== 1 ? 's' : ''} online
-                </span>
+      <main className="flex-1 p-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Canvas Toolbar */}
+          <div className="mb-3 bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                {/* Canvas Controls */}
+                <button
+                  onClick={handleAddRectangle}
+                  className="flex items-center space-x-1 px-2 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                  title="Add Rectangle"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                  </svg>
+                  <span>Add Rectangle</span>
+                </button>
               </div>
-            </div>
-            
-            {onlineUsersCount > 0 && (
-              <div className="space-y-2">
-                {onlineUsers.map((onlineUser) => {
-                  // Clean up display name for each user to remove duplicates
-                  const cleanUserName = (() => {
-                    const rawName = onlineUser.displayName;
-                    
-                    // For email addresses, check for character-level duplication around the @ symbol
-                    if (rawName.includes('@')) {
-                      const allParts = rawName.split('@');
-                      if (allParts.length > 2) {
-                        // Handle cases like "g@gg@g" -> ["g", "gg", "g"]
-                        const cleanedParts = [];
-                        cleanedParts.push(allParts[0]); // Keep first part
-                        
-                        // For middle parts that might be duplicates, clean them
-                        for (let i = 1; i < allParts.length - 1; i++) {
-                          const part = allParts[i];
-                          const cleanPart = part.replace(/(.)\1+/g, '$1');
-                          if (cleanPart && cleanPart !== cleanedParts[cleanedParts.length - 1]) {
-                            cleanedParts.push(cleanPart);
-                          }
-                        }
-                        
-                        // Add last part (domain)
-                        if (allParts[allParts.length - 1]) {
-                          cleanedParts.push(allParts[allParts.length - 1]);
-                        }
-                        
-                        return cleanedParts.join('@');
-                      } else if (allParts.length === 2) {
-                        // Standard email cleaning
-                        const [localPart, domain] = allParts;
-                        const cleanLocal = localPart.replace(/(.)\1+/g, '$1');
-                        const cleanDomain = domain.replace(/(.)\1+/g, '$1');
-                        return `${cleanLocal}@${cleanDomain}`;
-                      }
-                      return rawName;
-                    }
-                    
-                    // For non-email display names, check for word-level duplication
-                    const words = rawName.split(' ');
-                    const cleanWords = [];
-                    for (let i = 0; i < words.length; i++) {
-                      if (i === 0 || words[i] !== words[i-1]) {
-                        cleanWords.push(words[i]);
-                      }
-                    }
-                    return cleanWords.join(' ');
-                  })();
-                  
-                  return (
-                    <div
-                      key={onlineUser.uid}
-                      className="flex items-center space-x-2 p-2 rounded-lg text-xs font-medium border border-gray-200 shadow-sm max-w-full"
-                      style={{ 
-                        backgroundColor: onlineUser.color,
-                        color: getComplementaryColor(onlineUser.color as any),
-                        maxWidth: '80px'
-                      }}
-                      title={`${cleanUserName} ${onlineUser.uid === user?.uid ? '(you)' : ''}`}
-                    >
-                      <div className="w-3 h-3 rounded-full bg-white opacity-60 flex-shrink-0" />
-                      <span className="truncate min-w-0">
-                        {cleanUserName} {onlineUser.uid === user?.uid ? '(you)' : ''}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Canvas Area */}
-        <div className="flex-1 p-4">
-          <div className="h-full">
-            {/* Canvas Toolbar */}
-            <div className="mb-3 bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-3">
-              <div className="flex items-center justify-between">
+              
+              <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
+                {/* Online Users List */}
                 <div className="flex items-center space-x-2">
-                  {/* Canvas Controls */}
-                  <button
-                    onClick={handleAddRectangle}
-                    className="flex items-center space-x-1 px-2 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                    title="Add Rectangle"
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    <span>Add Rectangle</span>
-                  </button>
-                </div>
-                
-                <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
-                  {selectedObject && (
-                    <div className="text-blue-600 font-medium">
-                      Selected: Rectangle
+                  <div className={`w-3 h-3 rounded-full ${isPresenceConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="font-medium">
+                    {onlineUsersCount} user{onlineUsersCount !== 1 ? 's' : ''} online
+                  </span>
+                  {onlineUsersCount > 0 && (
+                    <div className="flex items-center space-x-1 ml-2">
+                      {onlineUsers.slice(0, 3).map((onlineUser) => ( // Show max 3 users with full names
+                        <div
+                          key={onlineUser.uid}
+                          className="flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border border-white shadow-sm"
+                          style={{ 
+                            backgroundColor: onlineUser.color,
+                            color: getComplementaryColor(onlineUser.color as any)
+                          }}
+                          title={`${onlineUser.displayName} ${onlineUser.uid === user?.uid ? '(you)' : ''}`}
+                        >
+                          <div className="w-3 h-3 rounded-full bg-white opacity-60" />
+                          <span className="whitespace-nowrap">
+                            {onlineUser.displayName} {onlineUser.uid === user?.uid ? '(you)' : ''}
+                          </span>
+                        </div>
+                      ))}
+                      {onlineUsersCount > 3 && (
+                        <div className="text-xs text-gray-500 ml-1">
+                          +{onlineUsersCount - 3} more
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
+                
+                {selectedObject && (
+                  <div className="text-blue-600 font-medium">
+                    Selected: Rectangle
+                  </div>
+                )}
               </div>
             </div>
+          </div>
           
           {/* Canvas Container */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-4">
@@ -271,7 +171,6 @@ export const CanvasPage: React.FC = () => {
           {/* Instructions */}
           <div className="mt-4 text-center text-sm text-gray-500">
             <p>Click "Add Rectangle" to create shapes • Drag to pan • Scroll to zoom • Click shapes to select</p>
-          </div>
           </div>
         </div>
       </main>
