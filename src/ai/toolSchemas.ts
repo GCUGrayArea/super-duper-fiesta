@@ -72,7 +72,7 @@ export const toolSchemas = [
     type: 'function',
     function: {
       name: 'resizeObject',
-      description: 'Resize an object by width/height (rect/text) or diameter (circles via equal width/height)',
+      description: 'Resize an object by width/height (rect/text). For circles, use resizeCircle.',
       parameters: {
         type: 'object',
         properties: {
@@ -81,6 +81,36 @@ export const toolSchemas = [
           height: { type: 'number' }
         },
         required: ['objectId', 'width', 'height']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'resizeCircle',
+      description: 'Resize a circle by radius',
+      parameters: {
+        type: 'object',
+        properties: {
+          objectId: { type: 'string' },
+          radius: { type: 'number' }
+        },
+        required: ['objectId', 'radius']
+      }
+    }
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'resizeText',
+      description: 'Resize a text object by fontSize',
+      parameters: {
+        type: 'object',
+        properties: {
+          objectId: { type: 'string' },
+          fontSize: { type: 'number' }
+        },
+        required: ['objectId', 'fontSize']
       }
     }
   },

@@ -6,6 +6,7 @@ import { store } from '../store';
 import { debugLog, debugError } from '../utils/debug';
 import { undoLastCommand, undoLastNCommands } from './history';
 import { chatComplete } from './openaiClient';
+import { handleUserMessageWithTools } from './messageHandler';
 
 // Logging is routed via debugLog('queue', ...)
 
@@ -795,11 +796,31 @@ export async function startQueueProcessor(canvasId: string): Promise<void> {
       const { command } = next.data() as any;
       await postAIMessage(canvasId, `Executing: ${command}`);
       rememberMessage(command);
+      // Feature flag: allow full tool-calling pipeline
+      const USE_TOOL_CALLING = (window as any)?.USE_TOOL_CALLING === true || true;
       // Classify → route
       let shouldAck = true;
       const anywhere = /\banywhere\b/i.test(command);
       const visibleSummary = await buildVisibleSummary(canvasId);
       const classification = await classifyCommand(command);
+
+      if (USE_TOOL_CALLING) {
+        try {
+          const reply = await handleUserMessageWithTools(command, canvasId, []);
+          const safe = (reply || '').replace(/```[\s\S]*?```/g, '').trim();
+          await postAIMessage(canvasId, safe || '');
+          shouldAck = false;
+        } catch (e) {
+          // If tool-calling fails, fall back to the normal pipeline below
+          debugError('queue', 'tool-calling failed; falling back', e);
+        }
+      }
+
+      if (USE_TOOL_CALLING && shouldAck === false) {
+        await setStatus(canvasId, id, 'complete');
+        setTimeout(async () => { debugLog('queue', 'deleting processed command', { id }); await deleteDoc(doc(db, `commandQueue/${canvasId}/commands`, id)); }, 1500);
+        return;
+      }
       if (classification === 'conversational') {
         try {
           const reply = await chatComplete(command);

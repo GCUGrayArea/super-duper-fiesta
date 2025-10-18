@@ -168,7 +168,7 @@ graph TB
 This project includes a client-side AI agent that can create and manipulate canvas objects via natural language. The current implementation runs entirely on the client (no Cloud Function queue processor yet) and uses a Vercel serverless proxy for OpenAI chat replies.
 
 ### Key Features
-- Shared chat (`chats/{canvasId}/messages`) with simple AI echo responses after command execution.
+- Shared chat (`chats/{canvasId}/messages`) with AI responses after command execution using tool-calling confirmations.
 - Command queue (`commandQueue/{canvasId}/commands`) processed on the client (FIFO).
 - AI tool wrappers for:
   - Creation: rectangle, circle, text
@@ -203,17 +203,18 @@ This project includes a client-side AI agent that can create and manipulate canv
 - `Undo the last 3`
 
 ### OpenAI Proxy
-- Vercel API route: `/api/openai-proxy` (uses `VITE_OPENAI_API_KEY` or `OPENAI_API_KEY`).
+- Vercel API route: `/api/openai-proxy` (uses `OPENAI_API_KEY` only).
 - Client helper: `src/ai/openaiClient.ts` → `chatComplete()`.
-- Tool schema stubs: `src/ai/toolSchemas.ts` (for future function-calling).
+- Tool schemas: `src/ai/toolSchemas.ts` aligned with implemented tools (including `resizeCircle` and `resizeText`).
+- Message handler: `src/ai/messageHandler.ts` → `handleUserMessageWithTools()` (function calling + tool result follow-up).
 
 ### Undo & Command History
 - Logger: `src/ai/history.ts`
 - Each wrapper logs an entry with `objectsCreated/Modified/Deleted` and `previousStates` for undo.
 - Queue supports `undo last` and `undo last N`.
 
-### Tool Schemas (for future function-calling)
-`src/ai/toolSchemas.ts` defines schemas for: createRectangle, createCircle, createText, moveObject, resizeObject, rotateObject, deleteObject, arrangeHorizontal, arrangeVertical, arrangeGrid, distributeEvenly, getCanvasState, getObjectsByDescription, getViewportCenter, undoLastCommand, undoLastNCommands, getCommandHistory.
+### Tool Schemas (function-calling)
+`src/ai/toolSchemas.ts` defines schemas for: createRectangle, createCircle, createText, moveObject, resizeObject, resizeCircle, resizeText, rotateObject, deleteObject, arrangeHorizontal, arrangeVertical, arrangeGrid, distributeEvenly, getCanvasState, getObjectsByDescription, getViewportCenter, undoLastCommand, undoLastNCommands, getCommandHistory.
 
 ### Security Rules
 See `firebase.rules` for chat/queue/aiCommands rules. Deploy with:
@@ -227,6 +228,19 @@ firebase deploy --only firestore:rules
 npm run dev
 ```
 2) Ensure Firestore rules (`firebase.rules`) are loaded in emulator or deployed.
+
+### Testing
+Run all tests:
+```
+npm test
+```
+or
+```
+npx vitest
+```
+
+- Unit: `__tests__/messageHandler.unit.test.ts` — validates tool-calling flow (no-tool path, createRectangle call, clarify on >3 deletions).
+- Integration: `__tests__/queueProcessor.integration.test.ts` — stubs Firestore and OpenAI proxy; simulates a queued command and ensures processing completes without errors.
 
 ### Deployment
 Build and deploy to Vercel:
