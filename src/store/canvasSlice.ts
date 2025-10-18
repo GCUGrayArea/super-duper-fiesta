@@ -59,12 +59,13 @@ const canvasSlice = createSlice({
       const objectIndex = state.objects.findIndex(obj => obj.id === id);
       
       if (objectIndex !== -1) {
-        state.objects[objectIndex] = {
+        const merged = {
           ...state.objects[objectIndex],
           ...updates,
           updatedAt: Date.now(),
           ...(userId && { lastModifiedBy: userId }),
-        };
+        } as CanvasObject;
+        state.objects[objectIndex] = merged;
       }
     },
 
@@ -199,7 +200,7 @@ const canvasSlice = createSlice({
 
     // Merge remote objects with local state (with smart echo prevention)
     mergeRemoteObjects: (state, action: PayloadAction<{ objects: CanvasObject[]; currentUserId: string }>) => {
-      const { objects: remoteObjects, currentUserId } = action.payload;
+      const { objects: remoteObjects } = action.payload;
       
       // Create a map of current objects for efficient lookup
       const currentObjectsMap = new Map(state.objects.map(obj => [obj.id, obj]));
@@ -217,23 +218,16 @@ const canvasSlice = createSlice({
           mergedObjects.push(remoteObj);
         } else {
           // EXISTING OBJECT: Apply echo prevention for updates
-          if (remoteObj.lastModifiedBy !== currentUserId) {
-            // Update from another user - apply it
-            mergedObjects.push(remoteObj);
-          } else {
-            // Echo update from current user - keep local version
-            mergedObjects.push(localObj);
-          }
+          // Always prefer newest updatedAt to avoid disappearing objects due to race
+          const preferRemote = (remoteObj.updatedAt ?? 0) >= (localObj.updatedAt ?? 0);
+          mergedObjects.push(preferRemote ? remoteObj : localObj);
         }
         
         // Remove from local map (processed)
         currentObjectsMap.delete(remoteObj.id);
       }
-      
-      // Add remaining local objects (not in remote - these were deleted by others)
-      for (const [_, localObj] of currentObjectsMap) {
-        mergedObjects.push(localObj);
-      }
+      // Do NOT re-add remaining local objects that are not present in remote.
+      // These were deleted remotely; remote is the source of truth.
       
       // Sort by z-index and update state
       state.objects = sortObjectsByZIndex(mergedObjects);

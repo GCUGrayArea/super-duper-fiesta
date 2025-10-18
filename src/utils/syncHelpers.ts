@@ -1,4 +1,4 @@
-import { CanvasObject, Rectangle, CANVAS_CONFIG } from '../types/canvas';
+import { CanvasObject, Rectangle, CANVAS_CONFIG, TextObject } from '../types/canvas';
 
 /**
  * Phase 4: Sync Threshold and Echo Prevention Utilities
@@ -84,22 +84,28 @@ export function shouldSyncObjectChanges(
     return true;
   }
   
-  // Size check (for rectangles)
+  // Size/rotation checks for rectangles
   if (original.type === 'rectangle' && current.type === 'rectangle') {
     const originalRect = original as Rectangle;
     const currentRect = current as Rectangle;
-    
     if (shouldSyncSizeChange(
       { width: originalRect.width, height: originalRect.height },
       { width: currentRect.width, height: currentRect.height }
-    )) {
-      return true;
-    }
-    
-    // Rotation check
-    if (shouldSyncRotationChange(originalRect.rotation, currentRect.rotation)) {
-      return true;
-    }
+    )) return true;
+    if (shouldSyncRotationChange(originalRect.rotation, currentRect.rotation)) return true;
+  }
+
+  // Size/rotation checks for text (height/width from textbox; rotation on text)
+  if (original.type === 'text' && current.type === 'text') {
+    const o = original as TextObject;
+    const c = current as TextObject;
+    if (shouldSyncSizeChange(
+      { width: o.width, height: o.height },
+      { width: c.width, height: c.height }
+    )) return true;
+    if (shouldSyncRotationChange(o.rotation ?? 0, c.rotation ?? 0)) return true;
+    // Text content changes should always sync
+    if (o.text !== c.text) return true;
   }
   
   return false;
@@ -196,13 +202,25 @@ export function createUpdatePayload(
     const origRect = original as Rectangle;
     const updatedRect = updated as Rectangle;
     
-    if (origRect.width !== updatedRect.width) payload.width = updatedRect.width;
-    if (origRect.height !== updatedRect.height) payload.height = updatedRect.height;
-    if (origRect.rotation !== updatedRect.rotation) payload.rotation = updatedRect.rotation;
-    if (origRect.fill !== updatedRect.fill) payload.fill = updatedRect.fill;
-    if (origRect.stroke !== updatedRect.stroke) payload.stroke = updatedRect.stroke;
-    if (origRect.strokeWidth !== updatedRect.strokeWidth) payload.strokeWidth = updatedRect.strokeWidth;
-    if (origRect.opacity !== updatedRect.opacity) payload.opacity = updatedRect.opacity;
+    if (origRect.width !== updatedRect.width) (payload as any).width = updatedRect.width;
+    if (origRect.height !== updatedRect.height) (payload as any).height = updatedRect.height;
+    if (origRect.rotation !== updatedRect.rotation) (payload as any).rotation = updatedRect.rotation;
+    if ((origRect as any).fill !== (updatedRect as any).fill) (payload as any).fill = (updatedRect as any).fill;
+    if ((origRect as any).stroke !== (updatedRect as any).stroke) (payload as any).stroke = (updatedRect as any).stroke;
+    if ((origRect as any).strokeWidth !== (updatedRect as any).strokeWidth) (payload as any).strokeWidth = (updatedRect as any).strokeWidth;
+    if ((origRect as any).opacity !== (updatedRect as any).opacity) (payload as any).opacity = (updatedRect as any).opacity;
+  }
+  if (original.type === 'text' && updated.type === 'text') {
+    const o = original as TextObject;
+    const u = updated as TextObject;
+    if (o.width !== u.width) (payload as any).width = u.width;
+    if (o.height !== u.height) (payload as any).height = u.height;
+    if (o.rotation !== u.rotation) (payload as any).rotation = u.rotation;
+    if (o.text !== u.text) (payload as any).text = u.text;
+    if (o.fontSize !== u.fontSize) (payload as any).fontSize = u.fontSize;
+    if (o.maxWidth !== u.maxWidth) (payload as any).maxWidth = u.maxWidth;
+    if (o.fill !== u.fill) (payload as any).fill = u.fill;
+    if (o.opacity !== u.opacity) (payload as any).opacity = u.opacity;
   }
   
   return payload;
@@ -238,6 +256,14 @@ export function updateSyncStateTracking(
       position: { x: object.x, y: object.y },
       size: { width: rect.width, height: rect.height },
       rotation: rect.rotation,
+      lastSyncTime: Date.now(),
+    };
+  } else if (object.type === 'text') {
+    const t = object as TextObject;
+    newState[object.id] = {
+      position: { x: t.x, y: t.y },
+      size: { width: t.width, height: t.height },
+      rotation: t.rotation ?? 0,
       lastSyncTime: Date.now(),
     };
   } else {

@@ -2,12 +2,14 @@ import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './authSlice';
 import canvasReducer from './canvasSlice';
 import presenceReducer from './presenceSlice';
+import debugReducer from './debugSlice';
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     canvas: canvasReducer,
     presence: presenceReducer,
+    debug: debugReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

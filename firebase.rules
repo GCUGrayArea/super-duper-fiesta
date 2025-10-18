@@ -1,8 +1,9 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Temporary wide-open window (grace period)
+    // Temporary wide-open window (your existing rule)
     function tempOpen() {
       return request.time < timestamp.date(2025, 11, 12);
     }
@@ -15,13 +16,19 @@ service cloud.firestore {
     // Chat messages
     match /chats/{canvasId} {
       match /messages/{messageId} {
+        // Read for any authed user
         allow read: if tempOpen() || request.auth != null;
+
+        // Create only by the authenticated user who is sending
         allow create: if tempOpen() || (
-          request.auth != null && request.resource.data.userId == request.auth.uid
+          request.auth != null &&
+          request.resource.data.userId == request.auth.uid
         );
-        // Allow AI/system messages to be updated/removed when needed
+
+        // Update/delete allowed to author or AI message entries
         allow update, delete: if tempOpen() || (
-          request.auth != null && (resource.data.userId == request.auth.uid || resource.data.isAI == true)
+          request.auth != null &&
+          (resource.data.userId == request.auth.uid || resource.data.isAI == true)
         );
       }
     }
@@ -29,21 +36,16 @@ service cloud.firestore {
     // Command queue
     match /commandQueue/{canvasId} {
       match /commands/{commandId} {
-        // Client-side processor for MVP: permit authed users
+        // MVP: allow any authed user; tighten later when moving processor server-side
         allow read, create, update, delete: if tempOpen() || request.auth != null;
       }
     }
 
-    // AI command history (used for undo)
-    match /aiCommands/{entryId} {
-      allow read, create: if tempOpen() || request.auth != null;
-      // Updates/deletes not needed for MVP; restrict unless temp window
-      allow update, delete: if tempOpen();
-    }
-
     // Users (self only)
     match /users/{userId} {
-      allow read, write: if tempOpen() || (request.auth != null && request.auth.uid == userId);
+      allow read, write: if tempOpen() || (
+        request.auth != null && request.auth.uid == userId
+      );
     }
 
     // Pending canvases
@@ -51,9 +53,11 @@ service cloud.firestore {
       allow read, write: if tempOpen() || request.auth != null;
     }
 
-    // Fallback: allow everything during temp window only
+    // Fallback: while tempOpen() is active, allow everywhere
     match /{document=**} {
       allow read, write: if tempOpen();
     }
   }
 }
+
+

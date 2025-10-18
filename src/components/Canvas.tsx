@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useCallback } from 'react';
-import * as fabric from 'fabric';
+import React, { useEffect, useRef, useCallback, useMemo, useState } from 'react';
+import { Stage, Layer, Rect, Text, Ellipse, Transformer, Group } from 'react-konva';
+import Konva from 'konva';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { 
-  selectCanvasObjects, 
-  selectViewport, 
+import {
+  selectCanvasObjects,
+  selectViewport,
   selectSelection,
   selectObject,
   updateObject,
@@ -13,8 +14,9 @@ import {
 } from '../store/canvasSlice';
 import { selectUser } from '../store/authSlice';
 import { selectUsersWithCursors } from '../store/presenceSlice';
-import { CANVAS_CONFIG, Rectangle, isRectangle } from '../types/canvas';
-import { calculateViewportCenter, findOverlappingObjects, createRectangle } from '../utils/canvasObjects';
+import { CANVAS_CONFIG, Rectangle, Circle, TextObject, isRectangle, isCircle } from '../types/canvas';
+import { calculateViewportCenter, findOverlappingObjects, createRectangle, createCircle, createText } from '../utils/canvasObjects';
+import { arrangeHorizontal, arrangeVertical, arrangeGrid, distributeEvenly } from '../utils/arrangement';
 import { useCanvasSync } from '../hooks/useCanvasSync';
 
 interface CanvasProps {
@@ -34,12 +36,20 @@ export const Canvas: React.FC<CanvasProps> = ({
   onMouseLeave,
   onUserActivity,
 }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const fabricCanvasRef = useRef<fabric.Canvas | null>(null);
+  const stageRef = useRef<Konva.Stage | null>(null);
+  const shapesLayerRef = useRef<Konva.Layer | null>(null);
+  const cursorsLayerRef = useRef<Konva.Layer | null>(null);
+  const transformerRef = useRef<Konva.Transformer | null>(null);
   const isPanningRef = useRef(false);
   const lastPanPointRef = useRef<{ x: number; y: number } | null>(null);
-  const isInternalSelectionRef = useRef(false); // Flag to prevent infinite loops
-  const cursorsRef = useRef<Map<string, fabric.Circle>>(new Map()); // Track cursor objects by user ID
+  const isInternalSelectionRef = useRef(false);
+  const nodeRefs = useRef<Map<string, Konva.Node>>(new Map());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [textEdit, setTextEdit] = useState<{ id: string; value: string; x: number; y: number; width: number } | null>(null);
+  // createOpen state moved to CanvasPage toolbar; keep no local state here
+  const [isMarquee, setIsMarquee] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
 
   const dispatch = useAppDispatch();
   const user = useAppSelector(selectUser);
@@ -49,486 +59,265 @@ export const Canvas: React.FC<CanvasProps> = ({
   const usersWithCursors = useAppSelector(selectUsersWithCursors);
 
   // Phase 4: Canvas sync integration
-  const { isConnected, syncObject, addObject } = useCanvasSync({
+  const { isConnected, syncObject, addObject, deleteObject: _deleteFromCanvas, batchUpdateObjects } = useCanvasSync({
     canvasId: 'main', // Use main canvas for MVP
     user: user!,
     enabled: !!user
   });
 
-  // Create a cursor object for a user
-  const createCursorObject = useCallback((userId: string, userName: string, userColor: string): fabric.Circle => {
-    try {
-      const cursor = new fabric.Circle({
-        radius: 8,
-        fill: userColor,
-        stroke: '#ffffff',
-        strokeWidth: 2,
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-        shadow: new fabric.Shadow({
-          color: 'rgba(0,0,0,0.3)',
-          blur: 4,
-          offsetX: 0,
-          offsetY: 2,
-        })
-      });
-
-      // Add text label with user name - positioned below the cursor
-      const text = new fabric.Text(userName, {
-        fontSize: 10,
-        fill: '#000000',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        originX: 'center',
-        originY: 'top',
-        top: 12, // Position below the cursor circle (radius 8 + 4px gap)
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-        backgroundColor: 'rgba(255, 255, 255, 0.9)', // White background for readability
-        padding: 2,
-      });
-
-      // Group cursor circle and text
-      const cursorGroup = new fabric.Group([cursor, text], {
-        left: 0,
-        top: 0,
-        selectable: false,
-        evented: false,
-        excludeFromExport: true,
-      });
-
-      // Store user ID for identification
-      (cursorGroup as any).userId = userId;
-      (cursorGroup as any).isCursor = true;
-
-      return cursorGroup as any;
-    } catch (error) {
-      console.error(`Error in createCursorObject:`, error);
-      throw error;
-    }
-  }, []);
-
-  // Update cursor positions based on current users with cursors
-  const updateCursors = useCallback(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !user) {
-      return;
-    }
-
-    // Get current cursor objects
-    const currentCursors = cursorsRef.current;
-
-    // usersWithCursors now contains only other users' cursors from simplified state
-    const otherUsers = usersWithCursors.filter(u => u.x >= 0 && u.y >= 0);
-
-    // Remove cursors for users who are no longer visible
-    currentCursors.forEach((cursorObj, userId) => {
-      const userStillVisible = otherUsers.find(u => u.uid === userId);
-      if (!userStillVisible) {
-        canvas.remove(cursorObj);
-        currentCursors.delete(userId);
-      }
-    });
-
-    // Add or update cursors for visible other users  
-    otherUsers.forEach(userCursor => {
-      const { uid, displayName, color, x, y } = userCursor;
-
-      let cursorObj = currentCursors.get(uid);
-      
-      // Create cursor if it doesn't exist
-      if (!cursorObj) {
-        try {
-          cursorObj = createCursorObject(uid, displayName, color);
-          canvas.add(cursorObj);
-          currentCursors.set(uid, cursorObj);
-        } catch (error) {
-          console.error(`Failed to create cursor object:`, error);
-          return;
-        }
-      }
-
-      // Update cursor position (coordinates are already in world space)
-      try {
-        cursorObj.set({
-          left: x,
-          top: y,
-        });
-        cursorObj.setCoords();
-      } catch (error) {
-        console.error(`Failed to update cursor position:`, error);
-      }
-    });
-
-    canvas.requestRenderAll();
-  }, [usersWithCursors, user, createCursorObject]);
-
-  // Initialize Fabric.js canvas
-  useEffect(() => {
-    if (!canvasRef.current || fabricCanvasRef.current) return;
-
-    const canvas = new fabric.Canvas(canvasRef.current, {
-      width,
-      height,
-      backgroundColor: '#f8f9fa',
-      selection: true, // Enable Fabric.js selection
-      preserveObjectStacking: true,
-      interactive: true,
-      allowTouchScrolling: false,
-    });
-
-    fabricCanvasRef.current = canvas;
-
-    // Set initial viewport
-    updateFabricViewport(canvas, viewport);
-
-    return () => {
-      // Clear all cursors
-      cursorsRef.current.clear();
-      canvas.dispose();
-      fabricCanvasRef.current = null;
-    };
+  // View transforms: convert world <-> stage coordinates
+  const computeStageTransform = useCallback((v: typeof viewport) => {
+    const scale = v.zoom;
+    const stageX = -(v.x * scale) + width / 2;
+    const stageY = -(v.y * scale) + height / 2;
+    return { scale, stageX, stageY };
   }, [width, height]);
 
-  // Update Fabric.js viewport when Redux viewport changes
-  const updateFabricViewport = useCallback((canvas: fabric.Canvas, viewportState: typeof viewport) => {
-    const { x, y, zoom } = viewportState;
-    
-    // Calculate viewport transformation
-    // Fabric.js uses top-left origin, we want center-based coordinates
-    const viewportLeft = x - (width / 2) / zoom;
-    const viewportTop = y - (height / 2) / zoom;
-    
-    canvas.setViewportTransform([
-      zoom, 0, 0, zoom,
-      -viewportLeft * zoom,
-      -viewportTop * zoom
+  const { scale, stageX, stageY } = useMemo(() => computeStageTransform(viewport), [viewport, computeStageTransform]);
+
+  const screenToWorld = useCallback((clientX: number, clientY: number) => {
+    const stage = stageRef.current;
+    if (!stage) return { x: 0, y: 0 };
+    const pointer = { x: clientX - stage.x(), y: clientY - stage.y() };
+    return { x: pointer.x / scale, y: pointer.y / scale };
+  }, [scale]);
+
+  // Update stage transforms when viewport changes
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    stage.scale({ x: scale, y: scale });
+    stage.position({ x: stageX, y: stageY });
+    stage.batchDraw();
+  }, [scale, stageX, stageY]);
+
+  // (Konva renderer) no fabric conversion needed
+
+  // Keep Redux single selection roughly in sync with local multi-select
+  useEffect(() => {
+    if (isInternalSelectionRef.current) return;
+    const primaryId = selectedIds[0] || null;
+    dispatch(selectObject(primaryId));
+  }, [selectedIds, dispatch]);
+
+  // Update Transformer nodes based on selection
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    if (!transformer) return;
+    const nodes: Konva.Node[] = [];
+    selectedIds.forEach(id => {
+      const node = nodeRefs.current.get(id);
+      if (node) nodes.push(node);
+    });
+    transformer.nodes(nodes);
+    const canRotate = nodes.length === 1 && [
+      'rectangle',
+      'text'
+    ].includes((nodes[0]?.getAttr('objectType') as string));
+    transformer.rotateEnabled(canRotate);
+    transformer.enabledAnchors([
+      'top-left','top-center','top-right',
+      'middle-left','middle-right',
+      'bottom-left','bottom-center','bottom-right'
     ]);
-    
-    canvas.requestRenderAll();
-  }, [width, height]);
+    transformer.update();
+    shapesLayerRef.current?.batchDraw();
+  }, [selectedIds]);
 
-  // Sync viewport changes
-  useEffect(() => {
-    if (fabricCanvasRef.current) {
-      updateFabricViewport(fabricCanvasRef.current, viewport);
-    }
-  }, [viewport, updateFabricViewport]);
-
-  // Convert Redux objects to Fabric.js objects (MVP: position and selection only)
-  const createFabricObject = useCallback((obj: Rectangle): fabric.Rect => {
-    const rect = new fabric.Rect({
-      left: obj.x,
-      top: obj.y,
-      width: obj.width,
-      height: obj.height,
-      fill: obj.fill,
-      stroke: obj.stroke,
-      strokeWidth: obj.strokeWidth,
-      opacity: obj.opacity,
-      angle: obj.rotation,
-      selectable: true,
-      hasControls: false, // MVP: Disable resize controls
-      hasBorders: true,
-      borderColor: '#007bff',
-      lockRotation: true, // MVP: Lock rotation
-      lockScalingX: true, // MVP: Lock scaling
-      lockScalingY: true, // MVP: Lock scaling
-      lockMovementX: false, // Allow movement
-      lockMovementY: false, // Allow movement
-    });
-
-    // Store object ID for reference
-    rect.set('objectId', obj.id);
-    
-    return rect;
+  // Selection helpers
+  const setSelection = useCallback((ids: string[]) => {
+    isInternalSelectionRef.current = true;
+    setSelectedIds(ids);
+    setTimeout(() => { isInternalSelectionRef.current = false; }, 0);
   }, []);
 
-  // Sync Redux objects to Fabric.js canvas
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    // Preserve cursor objects before clearing
-    const existingCursors: fabric.Object[] = [];
-    canvas.getObjects().forEach(obj => {
-      if ((obj as any).isCursor) {
-        existingCursors.push(obj);
-      }
-    });
-
-    // Clear existing objects
-    canvas.clear();
-    canvas.backgroundColor = '#f8f9fa';
-
-    // Add objects sorted by z-index first
-    const sortedObjects = [...objects].sort((a, b) => a.zIndex - b.zIndex);
-    
-    sortedObjects.forEach(obj => {
-      if (isRectangle(obj)) {
-        const fabricObj = createFabricObject(obj);
-        canvas.add(fabricObj);
-      }
-    });
-
-    // Re-add preserved cursor objects after shapes (so they appear on top)
-    existingCursors.forEach(cursor => {
-      canvas.add(cursor);
-    });
-
-    // Update selection (prevent infinite loop with internal flag)
-    isInternalSelectionRef.current = true;
-    canvas.discardActiveObject();
-    if (selection.selectedObjectId) {
-      const fabricObj = canvas.getObjects().find(
-        (obj: fabric.Object) => (obj as any).objectId === selection.selectedObjectId
-      );
-      if (fabricObj) {
-        canvas.setActiveObject(fabricObj);
-      }
-    }
-    
-    // Reset flag after a brief delay to ensure all events are processed
-    setTimeout(() => {
-      isInternalSelectionRef.current = false;
-    }, 0);
-
-    canvas.requestRenderAll();
-    
-    // Update cursors after objects are synced
-    updateCursors();
-  }, [objects, selection.selectedObjectId, createFabricObject, updateCursors]);
-
-  // Update cursors when users with cursors change
-  useEffect(() => {
-    updateCursors();
-  }, [usersWithCursors, updateCursors]);
-
-  // Handle object selection
-  const handleObjectSelection = useCallback((e: any) => {
-    // Skip if this is an internal/programmatic selection to prevent infinite loops
-    if (isInternalSelectionRef.current) {
+  // Click on empty stage to clear selection (alt starts marquee)
+  const handleStageMouseDown = useCallback((evt: Konva.KonvaEventObject<MouseEvent>) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (evt.evt.altKey) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const world = screenToWorld(pointer.x, pointer.y);
+      setIsMarquee(true);
+      setMarqueeStart(world);
+      setMarqueeEnd(world);
       return;
     }
-    
-    const target = e.target || e.selected?.[0];
-    // Skip cursor objects
-    if (target && (target as any).isCursor) {
-      return;
+    if (evt.evt.shiftKey) return;
+    const clickedOnEmpty = evt.target === stageRef.current;
+    if (clickedOnEmpty) {
+      setSelection([]);
+      // Begin panning
+      isPanningRef.current = true;
+      lastPanPointRef.current = { x: evt.evt.clientX, y: evt.evt.clientY };
+      const container = stageRef.current?.container();
+      if (container) container.style.cursor = 'grabbing';
     }
-    
-    if (target && (target as any).objectId) {
-      const objectId = (target as any).objectId;
-      dispatch(selectObject(objectId));
-      // Bring selected object to front with sync
-      if (user) {
-        dispatch(bringToFront({ objectId, userId: user.uid }));
+  }, [setSelection, screenToWorld]);
+
+  // Click on shape to select (supports shift-add/remove)
+  const handleShapeMouseDown = useCallback((id: string, evt: Konva.KonvaEventObject<MouseEvent>) => {
+    const isShift = evt.evt.shiftKey;
+    setSelectedIds(prev => {
+      if (isShift) {
+        return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
       }
+      return [id];
+    });
+    if (user) {
+      dispatch(bringToFront({ objectId: id, userId: user.uid }));
     }
   }, [dispatch, user]);
 
-  // Handle canvas click (deselect if clicking empty area)
-  const handleCanvasClick = useCallback((e: any) => {
-    // Skip if this is an internal operation
-    if (isInternalSelectionRef.current) {
-      return;
-    }
-    
-    // Skip cursor objects - don't deselect when clicking on cursor
-    if (e.target && (e.target as any).isCursor) {
-      return;
-    }
-    
-    if (!e.target) {
-      dispatch(selectObject(null));
-    }
-  }, [dispatch]);
 
+  // No-op during drag (we sync on end)
+  const handleObjectMoving = useCallback(() => {}, []);
 
-  // MVP: Only handle movement (resize/rotation removed)
-  const handleObjectMoving = useCallback((_e: any) => {
-    // Don't update Redux during drag - it causes interruption
-    // We'll update on drag end instead
-  }, []);
-
-  // Handle mouse up on canvas to sync object positions after drag (MVP: position only)
-  const handleObjectMouseUp = useCallback(async () => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas || !user) return;
-    
-    const activeObject = canvas.getActiveObject();
-    if (activeObject && (activeObject as any).objectId) {
-      const objectId = (activeObject as any).objectId;
-      
-      // Bring to front when dragging
-      dispatch(bringToFront({ objectId, userId: user.uid }));
-      
-      const updates = {
-        x: activeObject.left || 0,
-        y: activeObject.top || 0,
-      };
-      
-      // Update position after drag ends
-      dispatch(updateObject({
-        id: objectId,
-        updates,
-        userId: user.uid,
-      }));
-      
-      // Phase 5: Track user activity on object edit
-      if (onUserActivity) {
-        try {
-          await onUserActivity();
-        } catch (error) {
-          console.error('Failed to update user activity:', error);
-        }
-      }
-      
-      // Sync with thresholds
-      try {
-        await syncObject(objectId, updates);
-      } catch (error) {
-        console.error('Failed to sync object position:', error);
-      }
+  // Handle drag end to sync object position
+  const handleDragEnd = useCallback(async (id: string, node: Konva.Node) => {
+    if (!user) return;
+    const pos = node.position();
+    const nodeWidth = (node as any).width?.() ?? 0;
+    const nodeHeight = (node as any).height?.() ?? 0;
+    // Convert center-based node position back to our top-left model coordinates
+    const updates = { x: pos.x - nodeWidth / 2, y: pos.y - nodeHeight / 2 } as { x: number; y: number };
+    dispatch(updateObject({ id, updates, userId: user.uid }));
+    if (onUserActivity) {
+      try { await onUserActivity(); } catch {}
+    }
+    try {
+      await syncObject(id, updates);
+    } catch (error) {
+      console.error('Failed to sync object position:', error);
     }
   }, [dispatch, user, syncObject, onUserActivity]);
 
-  // Handle mouse wheel for zooming
-  const handleMouseWheel = useCallback((e: any) => {
-    const event = e.e as WheelEvent;
-    event.preventDefault();
+  // Handle transform end (resize/rotate)
+  const handleTransformEnd = useCallback(async () => {
+    if (!user) return;
+    const transformer = transformerRef.current;
+    if (!transformer) return;
+    const nodes = transformer.nodes();
+    for (const node of nodes) {
+      const id = node.getAttr('objectId') as string;
+      const objectType = node.getAttr('objectType') as string;
+      const scaleX = (node as any).scaleX?.() ?? 1;
+      const scaleY = (node as any).scaleY?.() ?? 1;
+      const width = (node as any).width?.() ?? 0;
+      const height = (node as any).height?.() ?? 0;
+      const finalWidth = Math.max(1, width * scaleX);
+      const finalHeight = Math.max(1, height * scaleY);
+      const rotation = (node as any).rotation?.() ?? 0;
+      const pos = node.position();
 
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
+      // Convert center-based node position back to top-left model coordinates
+      const topLeftX = pos.x - finalWidth / 2;
+      const topLeftY = pos.y - finalHeight / 2;
+      const updates: any = { x: topLeftX, y: topLeftY };
+      if (objectType === 'rectangle') {
+        updates.width = finalWidth;
+        updates.height = finalHeight;
+        updates.rotation = rotation;
+      } else if (objectType === 'circle') {
+        updates.width = finalWidth;
+        updates.height = finalHeight;
+      } else if (objectType === 'text') {
+        updates.width = finalWidth;
+        updates.height = finalHeight;
+        updates.rotation = rotation;
+      }
 
-    const pointer = canvas.getPointer(event);
-    const delta = event.deltaY > 0 ? -1 : 1; // Invert for natural scrolling
+      (node as any).scaleX(1);
+      (node as any).scaleY(1);
 
-    // Convert screen coordinates to world coordinates
-    const zoom = viewport.zoom;
-    const worldX = viewport.x + (pointer.x - width / 2) / zoom;
-    const worldY = viewport.y + (pointer.y - height / 2) / zoom;
-
-    dispatch(zoomViewport({
-      delta,
-      centerX: worldX,
-      centerY: worldY,
-    }));
-  }, [dispatch, viewport, width, height]);
-
-  // Handle mouse down for panning (only on empty canvas)
-  const handleCanvasMouseDown = useCallback((e: any) => {
-    const event = e.e as MouseEvent;
-    
-    // Skip cursor objects for panning
-    if (e.target && (e.target as any).isCursor) {
-      return;
-    }
-    
-    // Only start panning if clicking empty area (no target object)
-    if (!e.target && !e.subTargets?.length) {
-      isPanningRef.current = true;
-      lastPanPointRef.current = { x: event.clientX, y: event.clientY };
-      
-      if (fabricCanvasRef.current) {
-        fabricCanvasRef.current.defaultCursor = 'grabbing';
-        fabricCanvasRef.current.hoverCursor = 'grabbing';
+      dispatch(updateObject({ id, updates, userId: user.uid }));
+      try {
+        await syncObject(id, updates);
+      } catch (error) {
+        console.error('Failed to sync object modification:', error);
       }
     }
-  }, []);
+  }, [dispatch, user, syncObject]);
 
-  // Handle mouse move for panning (only when panning is active)
-  const handleCanvasMouseMove = useCallback((e: any) => {
-    const event = e.e as MouseEvent;
+  // Begin in-place text edit
+  const beginTextEdit = useCallback((t: TextObject) => {
+    // Compute screen coordinates from world using current stage transform
+    const left = t.x * scale + stageX;
+    const top = t.y * scale + stageY;
+    setTextEdit({ id: t.id, value: t.text, x: left, y: top, width: t.width * scale });
+  }, [scale, stageX, stageY]);
 
-    // Phase 5: Always call cursor tracking (if provided)
-    if (onMouseMove) {
-      onMouseMove(event);
+  const commitTextEdit = useCallback(async () => {
+    if (!user || !textEdit) return;
+    const { id, value } = textEdit;
+    const updates: any = { text: value };
+    dispatch(updateObject({ id, updates, userId: user.uid }));
+    try { await syncObject(id, updates); } catch (e) { console.error('Failed to sync text edit:', e); }
+    setTextEdit(null);
+  }, [dispatch, syncObject, textEdit, user]);
+
+  // Handle mouse wheel for zooming
+  const handleWheel = useCallback((evt: Konva.KonvaEventObject<WheelEvent>) => {
+    evt.evt.preventDefault();
+    const delta = evt.evt.deltaY > 0 ? -1 : 1; // natural scroll
+    const stage = stageRef.current;
+    if (!stage) return;
+    const pointer = stage.getPointerPosition();
+    if (!pointer) return;
+    const world = screenToWorld(pointer.x, pointer.y);
+    dispatch(zoomViewport({ delta, centerX: world.x, centerY: world.y }));
+  }, [dispatch, screenToWorld]);
+
+  // Panning: start inside mouse down handler; no separate handler necessary
+
+  // Mouse move: cursor tracking + marquee + panning
+  const handleStageMouseMove = useCallback((evt: Konva.KonvaEventObject<MouseEvent>) => {
+    if (onMouseMove) onMouseMove(evt.evt);
+    const stage = stageRef.current;
+    if (!stage) return;
+    if (isMarquee && marqueeStart) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      const world = screenToWorld(pointer.x, pointer.y);
+      setMarqueeEnd(world);
+      const minX = Math.min(marqueeStart.x, world.x);
+      const maxX = Math.max(marqueeStart.x, world.x);
+      const minY = Math.min(marqueeStart.y, world.y);
+      const maxY = Math.max(marqueeStart.y, world.y);
+      const hits = objects
+        .filter(o => (o as any).width !== undefined && (o as any).height !== undefined)
+        .filter(o => !(o.x + (o as any).width < minX || o.x > maxX || o.y + (o as any).height < minY || o.y > maxY))
+        .map(o => o.id);
+      setSelectedIds(hits);
+      return;
     }
-
-    // Continue with panning logic only if panning is active
     if (!isPanningRef.current || !lastPanPointRef.current) return;
-
-    const deltaX = (lastPanPointRef.current.x - event.clientX) / viewport.zoom;
-    const deltaY = (lastPanPointRef.current.y - event.clientY) / viewport.zoom;
-
+    const deltaX = (lastPanPointRef.current.x - evt.evt.clientX) / viewport.zoom;
+    const deltaY = (lastPanPointRef.current.y - evt.evt.clientY) / viewport.zoom;
     dispatch(panViewport({ deltaX, deltaY }));
+    lastPanPointRef.current = { x: evt.evt.clientX, y: evt.evt.clientY };
+  }, [dispatch, viewport.zoom, onMouseMove, isMarquee, marqueeStart, objects, screenToWorld]);
 
-    lastPanPointRef.current = { x: event.clientX, y: event.clientY };
-  }, [dispatch, viewport.zoom, onMouseMove]);
-
-  // Handle mouse up for panning
-  const handleCanvasMouseUp = useCallback(() => {
+  // End panning or finish marquee
+  const handleStagePanEnd = useCallback(() => {
+    if (isMarquee) {
+      setIsMarquee(false);
+      setMarqueeStart(null);
+      setMarqueeEnd(null);
+    }
     isPanningRef.current = false;
     lastPanPointRef.current = null;
+    const container = stageRef.current?.container();
+    if (container) container.style.cursor = 'default';
+  }, [isMarquee]);
 
-    if (fabricCanvasRef.current) {
-      fabricCanvasRef.current.defaultCursor = 'default';
-      fabricCanvasRef.current.hoverCursor = 'move';
-    }
-  }, []);
-
-  // Handle mouse leave for cursor tracking
-  const handleCanvasMouseLeave = useCallback(() => {
-    // Phase 5: Call cursor tracking mouse leave (if provided)
-    if (onMouseLeave) {
-      onMouseLeave();
-    }
+  // Mouse leave for cursor tracking
+  const handleStageMouseLeave = useCallback(() => {
+    if (onMouseLeave) onMouseLeave();
   }, [onMouseLeave]);
 
-  // Add Fabric.js event listeners (MVP: selection and movement only)
-  useEffect(() => {
-    const canvas = fabricCanvasRef.current;
-    if (!canvas) return;
-
-    canvas.on('selection:created', handleObjectSelection);
-    canvas.on('selection:updated', handleObjectSelection);
-    canvas.on('mouse:down', handleCanvasClick);
-    canvas.on('mouse:wheel', handleMouseWheel);
-    
-    // MVP: Only movement events (resize/rotation removed)
-    canvas.on('object:moving', handleObjectMoving);
-    canvas.on('mouse:up', handleObjectMouseUp);
-    
-    // Canvas panning events (only for empty areas)
-    canvas.on('mouse:down', handleCanvasMouseDown);
-    canvas.on('mouse:move', handleCanvasMouseMove);
-    canvas.on('mouse:up', handleCanvasMouseUp);
-
-    // Phase 5: Mouse leave for cursor tracking
-    canvas.on('mouse:out', handleCanvasMouseLeave);
-
-    return () => {
-      canvas.off('selection:created', handleObjectSelection);
-      canvas.off('selection:updated', handleObjectSelection);
-      canvas.off('mouse:down', handleCanvasClick);
-      canvas.off('mouse:wheel', handleMouseWheel);
-      
-      // MVP: Only movement events
-      canvas.off('object:moving', handleObjectMoving);
-      canvas.off('mouse:up', handleObjectMouseUp);
-      
-      // Canvas panning events
-      canvas.off('mouse:down', handleCanvasMouseDown);
-      canvas.off('mouse:move', handleCanvasMouseMove);
-      canvas.off('mouse:up', handleCanvasMouseUp);
-      
-      // Phase 5: Mouse leave
-      canvas.off('mouse:out', handleCanvasMouseLeave);
-    };
-  }, [
-    handleObjectSelection,
-    handleCanvasClick,
-    handleObjectMoving,
-    handleObjectMouseUp,
-    handleMouseWheel,
-    handleCanvasMouseDown,
-    handleCanvasMouseMove,
-    handleCanvasMouseUp,
-    handleCanvasMouseLeave,
-  ]);
+  // No imperative event wiring needed with Konva; handlers are attached inline
 
   // MVP: Delete functionality removed (will be added post-MVP)
 
@@ -601,20 +390,364 @@ export const Canvas: React.FC<CanvasProps> = ({
     };
   }, [handleAddRectangle]);
 
+  // Add circle function
+  const handleAddCircle = useCallback(async () => {
+    if (!user) return;
+
+    const center = calculateViewportCenter(viewport, width, height);
+    const diameter = CANVAS_CONFIG.DEFAULT_CIRCLE_DIAMETER;
+    const circX = center.x - diameter / 2;
+    const circY = center.y - diameter / 2;
+
+    try {
+      const newCircle = createCircle(circX, circY, user.uid, objects);
+      await addObject(newCircle);
+
+      if (onUserActivity) {
+        try {
+          await onUserActivity();
+        } catch (error) {
+          console.error('Failed to update user activity:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to create circle in Firebase:', error);
+      if (onNotification) {
+        onNotification('Failed to create circle', 'error');
+      }
+    }
+  }, [viewport, width, height, objects, onNotification, user, addObject, onUserActivity]);
+
+  // Add text function
+  const handleAddText = useCallback(async () => {
+    if (!user) return;
+
+    const center = calculateViewportCenter(viewport, width, height);
+    const defaultText = 'Text';
+    const textX = center.x; // Place with top-left at center for simplicity
+    const textY = center.y;
+
+    try {
+      const newText = createText(defaultText, textX, textY, user.uid, objects);
+      await addObject(newText);
+
+      if (onUserActivity) {
+        try {
+          await onUserActivity();
+        } catch (error) {
+          console.error('Failed to update user activity:', error);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to create text in Firebase:', error);
+      if (onNotification) {
+        onNotification('Failed to create text', 'error');
+      }
+    }
+  }, [viewport, width, height, objects, onNotification, user, addObject, onUserActivity]);
+
+  // Expose add circle/text functions
+  useEffect(() => {
+    (window as any).canvasAddCircle = handleAddCircle;
+    (window as any).canvasAddText = handleAddText;
+    return () => {
+      delete (window as any).canvasAddCircle;
+      delete (window as any).canvasAddText;
+    };
+  }, [handleAddCircle, handleAddText]);
+
+  // Delete selected object(s) via single Firestore write (batch)
+  const handleDeleteSelected = useCallback(async () => {
+    if (!user) return;
+    const idsToDelete = selectedIds.length > 0
+      ? selectedIds
+      : (selection.selectedObjectId ? [selection.selectedObjectId] : []);
+    if (idsToDelete.length === 0) {
+      if (onNotification) {
+        onNotification('No object selected to delete', 'warning');
+      }
+      return;
+    }
+    try {
+      const remaining = objects.filter(o => !idsToDelete.includes(o.id));
+      await batchUpdateObjects(remaining);
+      if (onUserActivity) {
+        try { await onUserActivity(); } catch (error) { console.error('Failed to update user activity:', error); }
+      }
+      // Clear selection after deletion
+      setSelectedIds([]);
+      dispatch(selectObject(null));
+    } catch (error) {
+      console.error('Failed to delete object(s):', error);
+      if (onNotification) {
+        onNotification('Failed to delete object(s)', 'error');
+      }
+    }
+  }, [user, selectedIds, selection.selectedObjectId, objects, batchUpdateObjects, onUserActivity, onNotification, dispatch]);
+
+  // Expose delete function
+  useEffect(() => {
+    (window as any).canvasDeleteSelected = handleDeleteSelected;
+    return () => {
+      delete (window as any).canvasDeleteSelected;
+    };
+  }, [handleDeleteSelected]);
+
+  // Keyboard: Delete or Backspace to delete selected object
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        const target = e.target as HTMLElement | null;
+        const isInput = !!target && (
+          target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          (target as any).isContentEditable === true
+        );
+        if (isInput) return; // Do not intercept typing in inputs/editors
+
+        e.preventDefault();
+        (async () => {
+          try {
+            await handleDeleteSelected();
+          } catch (err) {
+            // noop
+          }
+        })();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDeleteSelected]);
+
+  // Helpers to get selected object IDs (Konva multi-selection)
+  const getSelectedObjectIds = useCallback((): string[] => {
+    if (selectedIds.length > 0) return selectedIds;
+    if (selection.selectedObjectId) return [selection.selectedObjectId];
+    return [];
+  }, [selectedIds, selection.selectedObjectId]);
+
+  // Arrangement actions using batch update
+  const handleArrangeHorizontal = useCallback(async () => {
+    const ids = getSelectedObjectIds();
+    if (ids.length === 0) return;
+    const updated = arrangeHorizontal(objects, ids, 16);
+    await batchUpdateObjects(updated);
+  }, [objects, getSelectedObjectIds, batchUpdateObjects]);
+
+  const handleArrangeVertical = useCallback(async () => {
+    const ids = getSelectedObjectIds();
+    if (ids.length === 0) return;
+    const updated = arrangeVertical(objects, ids, 16);
+    await batchUpdateObjects(updated);
+  }, [objects, getSelectedObjectIds, batchUpdateObjects]);
+
+  const handleArrangeGrid = useCallback(async () => {
+    const ids = getSelectedObjectIds();
+    if (ids.length === 0) return;
+    const updated = arrangeGrid(objects, ids, { spacing: 16, viewportWidth: width });
+    await batchUpdateObjects(updated);
+  }, [objects, getSelectedObjectIds, batchUpdateObjects, width]);
+
+  const handleDistributeHorizontal = useCallback(async () => {
+    const ids = getSelectedObjectIds();
+    if (ids.length < 3) return; // need at least 3 to distribute
+    const updated = distributeEvenly(objects, ids, 'horizontal');
+    await batchUpdateObjects(updated);
+  }, [objects, getSelectedObjectIds, batchUpdateObjects]);
+
+  const handleDistributeVertical = useCallback(async () => {
+    const ids = getSelectedObjectIds();
+    if (ids.length < 3) return;
+    const updated = distributeEvenly(objects, ids, 'vertical');
+    await batchUpdateObjects(updated);
+  }, [objects, getSelectedObjectIds, batchUpdateObjects]);
+
+  // Expose arrangement functions for toolbar
+  useEffect(() => {
+    (window as any).canvasArrangeHorizontal = handleArrangeHorizontal;
+    (window as any).canvasArrangeVertical = handleArrangeVertical;
+    (window as any).canvasArrangeGrid = handleArrangeGrid;
+    (window as any).canvasDistributeHorizontal = handleDistributeHorizontal;
+    (window as any).canvasDistributeVertical = handleDistributeVertical;
+    return () => {
+      delete (window as any).canvasArrangeHorizontal;
+      delete (window as any).canvasArrangeVertical;
+      delete (window as any).canvasArrangeGrid;
+      delete (window as any).canvasDistributeHorizontal;
+      delete (window as any).canvasDistributeVertical;
+    };
+  }, [handleArrangeHorizontal, handleArrangeVertical, handleArrangeGrid, handleDistributeHorizontal, handleDistributeVertical]);
+
+  // Render cursors layer nodes
+  const otherUsers = useMemo(() => usersWithCursors.filter(u => u.x >= 0 && u.y >= 0), [usersWithCursors]);
+
+  // Sorted objects for drawing order
+  const sortedObjects = useMemo(() => [...objects].sort((a, b) => a.zIndex - b.zIndex), [objects]);
+
   return (
     <div className="relative overflow-hidden border border-gray-300 rounded-lg">
-      <canvas
-        ref={canvasRef}
-        className="block cursor-default"
-      />
-      
-      {/* Viewport info overlay (development) */}
-      <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded z-50">
+      <Stage
+        ref={node => { stageRef.current = node as any; }}
+        width={width}
+        height={height}
+        onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStagePanEnd}
+        onWheel={handleWheel}
+        onMouseLeave={handleStageMouseLeave}
+        className="cursor-default"
+      >
+        <Layer ref={node => { shapesLayerRef.current = node as any; }} listening>
+          {/* Shapes */}
+          {sortedObjects.map(obj => {
+            const key = obj.id;
+            const commonProps = {
+              x: obj.x,
+              y: obj.y,
+              draggable: true,
+              stroke: (obj as any).stroke,
+              strokeWidth: (obj as any).strokeWidth,
+              opacity: (obj as any).opacity ?? 1,
+              onDragMove: () => handleObjectMoving(),
+              onDragEnd: (e: any) => handleDragEnd(obj.id, e.target),
+              onMouseDown: (e: any) => handleShapeMouseDown(obj.id, e),
+              ref: (node: any) => {
+                if (node) {
+                  node.setAttr('objectId', obj.id);
+                  node.setAttr('objectType', obj.type);
+                  nodeRefs.current.set(obj.id, node);
+                } else {
+                  nodeRefs.current.delete(obj.id);
+                }
+              }
+            } as any;
+
+            if (isRectangle(obj)) {
+              return (
+                <Rect
+                  key={key}
+                  {...commonProps}
+                  x={obj.x + obj.width / 2}
+                  y={obj.y + obj.height / 2}
+                  width={obj.width}
+                  height={obj.height}
+                  offsetX={obj.width / 2}
+                  offsetY={obj.height / 2}
+                  fill={obj.fill}
+                  rotation={(obj as Rectangle).rotation}
+                  shadowBlur={0}
+                  cornerRadius={0}
+                  perfectDrawEnabled={false}
+                />
+              );
+            }
+            if (isCircle(obj)) {
+              return (
+                <Ellipse
+                  key={key}
+                  {...commonProps}
+                  x={obj.x + (obj as Circle).width / 2}
+                  y={obj.y + (obj as Circle).height / 2}
+                  width={(obj as Circle).width}
+                  height={(obj as Circle).height}
+                  radiusX={(obj as Circle).width / 2}
+                  radiusY={(obj as Circle).height / 2}
+                  offsetX={(obj as Circle).width / 2}
+                  offsetY={(obj as Circle).height / 2}
+                  fill={(obj as Circle).fill}
+                  rotation={0}
+                  listening
+                />
+              );
+            }
+            // Text
+            const t = obj as TextObject;
+            return (
+              <Text
+                key={key}
+                {...commonProps}
+                x={t.x + t.width / 2}
+                y={t.y + t.height / 2}
+                width={t.width}
+                height={t.height}
+                offsetX={t.width / 2}
+                offsetY={t.height / 2}
+                text={t.text}
+                fontSize={t.fontSize}
+                fill={t.fill}
+                rotation={t.rotation}
+                onDblClick={() => beginTextEdit(t)}
+                listening
+              />
+            );
+          })}
+
+          {/* Transformer for selection */}
+          <Transformer
+            ref={node => { transformerRef.current = node as any; }}
+            rotateEnabled
+            ignoreStroke={false}
+            boundBoxFunc={(oldBox, newBox) => {
+              // prevent negative sizes
+              if (newBox.width < 1 || newBox.height < 1) {
+                return oldBox;
+              }
+              return newBox;
+            }}
+            onTransformEnd={handleTransformEnd}
+          />
+          {isMarquee && marqueeStart && marqueeEnd && (
+            <Rect
+              x={Math.min(marqueeStart.x, marqueeEnd.x)}
+              y={Math.min(marqueeStart.y, marqueeEnd.y)}
+              width={Math.abs(marqueeEnd.x - marqueeStart.x)}
+              height={Math.abs(marqueeEnd.y - marqueeStart.y)}
+              fill="rgba(59,130,246,0.1)"
+              stroke="#3b82f6"
+              strokeWidth={1 / Math.max(scale, 0.0001)}
+              dash={[4 / Math.max(scale, 0.0001), 4 / Math.max(scale, 0.0001)]}
+              listening={false}
+            />
+          )}
+        </Layer>
+
+        {/* Cursors overlay - not interactive */}
+        <Layer ref={node => { cursorsLayerRef.current = node as any; }} listening={false}>
+          {otherUsers.map(u => (
+            <Group key={u.uid} x={u.x} y={u.y} listening={false}>
+              <Ellipse radiusX={8} radiusY={8} fill={u.color} stroke="#ffffff" strokeWidth={2} listening={false} />
+              <Text text={u.displayName} x={-30} y={12} fontSize={10} fill="#000000" listening={false} />
+            </Group>
+          ))}
+        </Layer>
+      </Stage>
+
+      {/* Toolbars are rendered in CanvasPage outside the canvas */}
+
+      {/* In-place text editor overlay */}
+      {textEdit && (
+        <div
+          className="absolute z-50"
+          style={{ left: textEdit.x, top: textEdit.y, width: textEdit.width }}
+        >
+          <input
+            autoFocus
+            value={textEdit.value}
+            onChange={(e) => setTextEdit({ ...textEdit, value: e.target.value })}
+            onBlur={commitTextEdit}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitTextEdit();
+              if (e.key === 'Escape') setTextEdit(null);
+            }}
+            className="w-full px-1 py-0.5 text-sm border border-blue-400 rounded shadow-sm"
+          />
+        </div>
+      )}
+
+      <div className="absolute top-2 left-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded z-[60]">
         Viewport: {Math.round(viewport.x)}, {Math.round(viewport.y)} | Zoom: {Math.round(viewport.zoom * 100)}%
       </div>
-      
-      {/* Sync status indicator */}
-      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium z-50 ${
+      <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs font-medium z-[60] ${
         isConnected 
           ? 'bg-green-100 text-green-800 border border-green-200' 
           : 'bg-red-100 text-red-800 border border-red-200'

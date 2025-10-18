@@ -185,7 +185,14 @@ export const {
 // Selectors for easy access to presence state
 export const selectPresence = (state: { presence: PresenceState }) => state.presence;
 export const selectOnlineUsers = (state: { presence: PresenceState }) => state.presence.onlineUsers;
-export const selectOnlineUsersList = (state: { presence: PresenceState }) => Object.values(state.presence.onlineUsers);
+// Memoized-like stable selector to avoid returning new array instances unnecessarily
+export const selectOnlineUsersList = (state: { presence: PresenceState }) => {
+  const usersObj = state.presence.onlineUsers;
+  // Return cached array if we store it; otherwise, derive deterministically
+  // Sort keys to return a stable order and reduce reference churn between identical states
+  const ids = Object.keys(usersObj).sort();
+  return ids.map(id => usersObj[id]);
+};
 export const selectOnlineUsersCount = (state: { presence: PresenceState }) => Object.keys(state.presence.onlineUsers).length;
 export const selectPresenceConnection = (state: { presence: PresenceState }) => state.presence.isConnected;
 export const selectPresenceError = (state: { presence: PresenceState }) => state.presence.error;
@@ -193,8 +200,9 @@ export const selectCurrentCanvas = (state: { presence: PresenceState }) => state
 
 // Selector to get users with visible cursors (simple cursor-only approach)
 export const selectUsersWithCursors = (state: { presence: PresenceState }) => {
-  const cursors = Object.values(state.presence.otherUsersCursors);
-  return cursors;
+  const cursorsObj = state.presence.otherUsersCursors;
+  const ids = Object.keys(cursorsObj).sort();
+  return ids.map(id => cursorsObj[id]);
 };
 
 // Selector to get presence-based users with cursors (for compatibility)

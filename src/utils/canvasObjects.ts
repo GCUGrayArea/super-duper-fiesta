@@ -1,4 +1,4 @@
-import { Rectangle, CanvasObject, CANVAS_CONFIG } from '../types/canvas';
+import { Rectangle, CanvasObject, CANVAS_CONFIG, Circle, TextObject } from '../types/canvas';
 import { COLOR_PALETTE } from './colorHash';
 
 /**
@@ -58,6 +58,131 @@ export function createRectangle(
     strokeWidth: 1,
     opacity: 1.0,
     rotation: 0, // Default: no rotation
+    zIndex: calculateNextZIndex(existingObjects),
+    createdAt: now,
+    updatedAt: now,
+    lastModifiedBy: userId,
+  };
+}
+
+/**
+ * Validate that a bounding box lies fully within the world bounds
+ */
+function validateFullBounds(x: number, y: number, width: number, height: number): void {
+  if (width <= 0 || height <= 0) {
+    throw new Error('Width and height must be positive');
+  }
+  if (x < 0 || y < 0) {
+    throw new Error('Object position must be within canvas bounds (non-negative)');
+  }
+  if (x + width > CANVAS_CONFIG.WORLD_WIDTH || y + height > CANVAS_CONFIG.WORLD_HEIGHT) {
+    throw new Error('Object must fit entirely within the canvas bounds');
+  }
+}
+
+/**
+ * Normalize rotation to [0, 360)
+ */
+export function normalizeRotation(degrees: number): number {
+  const normalized = ((degrees % 360) + 360) % 360;
+  return normalized;
+}
+
+/**
+ * Create a new circle/ellipse with validation and defaults
+ * @param x - Top-left X of bounding box
+ * @param y - Top-left Y of bounding box
+ * @param userId - Creator user ID
+ * @param existingObjects - Objects for z-index calculation
+ * @param options - Optional overrides: width/height/fill
+ */
+export function createCircle(
+  x: number,
+  y: number,
+  userId: string,
+  existingObjects: CanvasObject[] = [],
+  options?: { width?: number; height?: number; fill?: string }
+): Circle {
+  const now = Date.now();
+  const width = Math.max(options?.width ?? CANVAS_CONFIG.DEFAULT_CIRCLE_DIAMETER, CANVAS_CONFIG.MIN_GEOMETRY_SIZE);
+  const height = Math.max(options?.height ?? CANVAS_CONFIG.DEFAULT_CIRCLE_DIAMETER, CANVAS_CONFIG.MIN_GEOMETRY_SIZE);
+
+  // Validate full bounds (no silent clamping)
+  validateFullBounds(x, y, width, height);
+
+  return {
+    id: generateObjectId(),
+    type: 'circle',
+    x,
+    y,
+    width,
+    height,
+    fill: options?.fill ?? getRandomRectangleColor(),
+    stroke: 'black',
+    strokeWidth: 1,
+    opacity: 1.0,
+    zIndex: calculateNextZIndex(existingObjects),
+    createdAt: now,
+    updatedAt: now,
+    lastModifiedBy: userId,
+  };
+}
+
+/**
+ * Approximate text bounding size for validation/layout
+ * - width: min(maxWidth, ~0.6 * fontSize * text.length)
+ * - height: ~1.2 * fontSize
+ */
+function approximateTextBounds(text: string, fontSize: number, maxWidth: number): { width: number; height: number } {
+  const approxWidth = Math.min(maxWidth, Math.max(1, Math.round(text.length * fontSize * 0.6)));
+  const approxHeight = Math.max(1, Math.round(fontSize * 1.2));
+  return { width: approxWidth, height: approxHeight };
+}
+
+/**
+ * Create a new text object with validation and defaults
+ * @param text - Text content
+ * @param x - Top-left X of bounding box
+ * @param y - Top-left Y of bounding box
+ * @param userId - Creator user ID
+ * @param existingObjects - Objects for z-index calculation
+ * @param options - Optional overrides: fontSize/maxWidth/fill
+ */
+export function createText(
+  text: string,
+  x: number,
+  y: number,
+  userId: string,
+  existingObjects: CanvasObject[] = [],
+  options?: { fontSize?: number; maxWidth?: number; fill?: string }
+): TextObject {
+  const now = Date.now();
+  const fontSize = options?.fontSize ?? CANVAS_CONFIG.DEFAULT_TEXT_FONT_SIZE;
+  const maxWidth = options?.maxWidth ?? CANVAS_CONFIG.DEFAULT_TEXT_MAX_WIDTH;
+
+  if (fontSize <= 0) {
+    throw new Error('fontSize must be positive');
+  }
+  if (maxWidth <= 0) {
+    throw new Error('maxWidth must be positive');
+  }
+
+  const { width, height } = approximateTextBounds(text, fontSize, maxWidth);
+  validateFullBounds(x, y, width, height);
+
+  return {
+    id: generateObjectId(),
+    type: 'text',
+    text,
+    x,
+    y,
+    width,
+    height,
+    fontSize,
+    maxWidth,
+    fill: options?.fill ?? '#000000',
+    opacity: 1.0,
+    rotation: 0,
     zIndex: calculateNextZIndex(existingObjects),
     createdAt: now,
     updatedAt: now,

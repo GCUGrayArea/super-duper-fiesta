@@ -10,6 +10,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from './config';
+import { debugLog, debugError } from '../utils/debug';
 import { CanvasDocument, CanvasObject } from '../types/canvas';
 
 /**
@@ -32,6 +33,7 @@ function getCanvasDocRef(canvasId: string) {
  */
 export async function loadCanvas(canvasId: string): Promise<CanvasDocument | null> {
   try {
+    debugLog('sync', 'loadCanvas', { canvasId });
     const docRef = getCanvasDocRef(canvasId);
     const docSnap: DocumentSnapshot = await getDoc(docRef);
     
@@ -48,7 +50,7 @@ export async function loadCanvas(canvasId: string): Promise<CanvasDocument | nul
     
     return null;
   } catch (error) {
-    console.error('Error loading canvas:', error);
+    debugError('sync', 'Error loading canvas:', error);
     throw error;
   }
 }
@@ -64,6 +66,7 @@ export async function createCanvas(
   createdBy: string
 ): Promise<void> {
   try {
+    debugLog('sync', 'createCanvas', { canvasId, createdBy });
     const docRef = getCanvasDocRef(canvasId);
     const now = Timestamp.now();
     
@@ -79,7 +82,7 @@ export async function createCanvas(
     
     await setDoc(docRef, canvasData);
   } catch (error) {
-    console.error('Error creating canvas:', error);
+    debugError('sync', 'Error creating canvas:', error);
     throw error;
   }
 }
@@ -97,6 +100,7 @@ export async function updateCanvasObjects(
   _userId: string
 ): Promise<void> {
   try {
+    debugLog('sync', 'updateCanvasObjects', { canvasId, count: objects.length });
     const docRef = getCanvasDocRef(canvasId);
     
     await updateDoc(docRef, {
@@ -104,7 +108,7 @@ export async function updateCanvasObjects(
       lastUpdated: serverTimestamp(), // Use server timestamp for consistency
     });
   } catch (error) {
-    console.error('Error updating canvas objects:', error);
+    debugError('sync', 'Error updating canvas objects:', error);
     throw error;
   }
 }
@@ -119,13 +123,18 @@ export async function updateCanvasObjects(
 export async function addObjectToCanvas(
   canvasId: string,
   newObject: CanvasObject,
-  existingObjects: CanvasObject[]
+  _existingObjects: CanvasObject[]
 ): Promise<void> {
   try {
-    const updatedObjects = [...existingObjects, newObject];
+    debugLog('sync', 'addObjectToCanvas', { canvasId, id: newObject.id, type: newObject.type });
+    // Read latest objects from Firestore to avoid stale writes
+    const docRef = getCanvasDocRef(canvasId);
+    const snap = await getDoc(docRef);
+    const current = snap.exists() ? (snap.data().objects || []) as CanvasObject[] : [];
+    const updatedObjects = [...current, newObject];
     await updateCanvasObjects(canvasId, updatedObjects, newObject.lastModifiedBy);
   } catch (error) {
-    console.error('Error adding object to canvas:', error);
+    debugError('sync', 'Error adding object to canvas:', error);
     throw error;
   }
 }
@@ -144,24 +153,28 @@ export async function updateObjectInCanvas(
   objectId: string,
   updates: Partial<CanvasObject>,
   userId: string,
-  existingObjects: CanvasObject[]
+  _existingObjects: CanvasObject[]
 ): Promise<void> {
   try {
-    const updatedObjects = existingObjects.map(obj => {
+    debugLog('sync', 'updateObjectInCanvas', { canvasId, objectId, updatesKeys: Object.keys(updates) });
+    // Read latest objects from Firestore to avoid stale writes
+    const docRef = getCanvasDocRef(canvasId);
+    const snap = await getDoc(docRef);
+    const current = snap.exists() ? (snap.data().objects || []) as CanvasObject[] : [];
+    const updatedObjects = current.map(obj => {
       if (obj.id === objectId) {
         return {
           ...obj,
           ...updates,
           updatedAt: Date.now(),
           lastModifiedBy: userId,
-        };
+        } as CanvasObject;
       }
       return obj;
     });
-    
     await updateCanvasObjects(canvasId, updatedObjects, userId);
   } catch (error) {
-    console.error('Error updating object in canvas:', error);
+    debugError('sync', 'Error updating object in canvas:', error);
     throw error;
   }
 }
@@ -178,13 +191,18 @@ export async function deleteObjectFromCanvas(
   canvasId: string,
   objectId: string,
   userId: string,
-  existingObjects: CanvasObject[]
+  _existingObjects: CanvasObject[]
 ): Promise<void> {
   try {
-    const updatedObjects = existingObjects.filter(obj => obj.id !== objectId);
+    debugLog('sync', 'deleteObjectFromCanvas', { canvasId, objectId });
+    // Read latest objects from Firestore to avoid stale writes
+    const docRef = getCanvasDocRef(canvasId);
+    const snap = await getDoc(docRef);
+    const current = snap.exists() ? (snap.data().objects || []) as CanvasObject[] : [];
+    const updatedObjects = current.filter(obj => obj.id !== objectId);
     await updateCanvasObjects(canvasId, updatedObjects, userId);
   } catch (error) {
-    console.error('Error deleting object from canvas:', error);
+    debugError('sync', 'Error deleting object from canvas:', error);
     throw error;
   }
 }
@@ -206,6 +224,7 @@ export function subscribeToCanvas(
   return onSnapshot(
     docRef,
     (docSnap) => {
+      debugLog('sync', 'subscribeToCanvas snapshot', { canvasId, exists: docSnap.exists() });
       if (docSnap.exists()) {
         const data = docSnap.data();
         const canvas: CanvasDocument = {
@@ -221,7 +240,7 @@ export function subscribeToCanvas(
       }
     },
     (error) => {
-      console.error('Canvas subscription error:', error);
+      debugError('sync', 'Canvas subscription error:', error);
       if (onError) {
         onError(error);
       }
@@ -240,7 +259,7 @@ export async function canvasExists(canvasId: string): Promise<boolean> {
     const docSnap = await getDoc(docRef);
     return docSnap.exists();
   } catch (error) {
-    console.error('Error checking canvas existence:', error);
+    debugError('sync', 'Error checking canvas existence:', error);
     return false;
   }
 }
@@ -261,7 +280,7 @@ export async function ensureCanvasExists(
       await createCanvas(canvasId, userId);
     }
   } catch (error) {
-    console.error('Error ensuring canvas exists:', error);
+    debugError('sync', 'Error ensuring canvas exists:', error);
     throw error;
   }
 }

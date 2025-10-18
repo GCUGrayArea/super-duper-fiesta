@@ -162,3 +162,76 @@ graph TB
     class SYNC_MANAGER,CURSOR_SYNC,PRESENCE_SYNC,LOCK_SYNC,STATE_RECONCILE syncClass
     class VERCEL,ENV_VARS deployClass
 ```
+
+## AI Agent (Phase 6) – Overview
+
+This project includes a client-side AI agent that can create and manipulate canvas objects via natural language. The current implementation runs entirely on the client (no Cloud Function queue processor yet) and uses a Vercel serverless proxy for OpenAI chat replies.
+
+### Key Features
+- Shared chat (`chats/{canvasId}/messages`) with simple AI echo responses after command execution.
+- Command queue (`commandQueue/{canvasId}/commands`) processed on the client (FIFO).
+- AI tool wrappers for:
+  - Creation: rectangle, circle, text
+  - Manipulation: move, resize, rotate, delete
+  - Layout: arrange horizontal/vertical/grid, distribute evenly
+  - Queries: get canvas state, select by description, get viewport center
+- AI-only undo (client-side): undo last / undo last N using per-command snapshots in `aiCommands`.
+
+### Validation & Arrangement Scope
+- Resize validation: minimum geometry sizes enforced (`MIN_GEOMETRY_SIZE`), and world-bounds checks prevent sizes/positions exceeding 5000x5000.
+- Circle resize: radius translated to diameter with the same validations.
+- Text resize: font size scales bounding box proportionally while staying within world bounds.
+- Arrangement scope: arrange/distribute defaults to objects created by the last AI command; include existing by saying “include existing/all/everything”.
+
+### Firestore Collections (AI)
+- `chats/{canvasId}/messages/{messageId}`
+- `commandQueue/{canvasId}/commands/{commandId}`
+- `aiCommands/{autoId}`
+
+### Example Commands (Chat)
+- `Create rectangle x 100, y 200, width 150, height 100 red`
+- `Create circle x 400, y 300, radius 60 blue`
+- `Create text "Hello World" x 500, y 350`
+- `Arrange horizontal red rectangles`
+- `Arrange vertical text`
+- `Arrange grid blue circles`
+- `Distribute horizontal rectangles`
+- `Delete red rectangles`
+- `Rotate red rectangles 45 degrees`
+- `Resize blue circle radius 120`
+- `Resize text width 200 height 60`
+- `Undo the last 3`
+
+### OpenAI Proxy
+- Vercel API route: `/api/openai-proxy` (uses `VITE_OPENAI_API_KEY` or `OPENAI_API_KEY`).
+- Client helper: `src/ai/openaiClient.ts` → `chatComplete()`.
+- Tool schema stubs: `src/ai/toolSchemas.ts` (for future function-calling).
+
+### Undo & Command History
+- Logger: `src/ai/history.ts`
+- Each wrapper logs an entry with `objectsCreated/Modified/Deleted` and `previousStates` for undo.
+- Queue supports `undo last` and `undo last N`.
+
+### Tool Schemas (for future function-calling)
+`src/ai/toolSchemas.ts` defines schemas for: createRectangle, createCircle, createText, moveObject, resizeObject, rotateObject, deleteObject, arrangeHorizontal, arrangeVertical, arrangeGrid, distributeEvenly, getCanvasState, getObjectsByDescription, getViewportCenter, undoLastCommand, undoLastNCommands, getCommandHistory.
+
+### Security Rules
+See `firebase.rules` for chat/queue/aiCommands rules. Deploy with:
+```
+firebase deploy --only firestore:rules
+```
+
+### Local Development
+1) Start emulators and app (example):
+```
+npm run dev
+```
+2) Ensure Firestore rules (`firebase.rules`) are loaded in emulator or deployed.
+
+### Deployment
+Build and deploy to Vercel:
+```
+npm run build
+npm run deploy
+```
+Refer to `DEPLOYMENT.md` for details.

@@ -1,25 +1,27 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAppSelector } from '../store/hooks';
 import { selectUser } from '../store/authSlice';
-import { selectSelectedObject, selectViewport } from '../store/canvasSlice';
-import { selectOnlineUsersList, selectOnlineUsersCount, selectPresenceConnection } from '../store/presenceSlice';
-import { Canvas, NotificationOverlay, useNotifications } from '../components';
+import { selectViewport } from '../store/canvasSlice';
+// import { selectOnlineUsersList, selectOnlineUsersCount, selectPresenceConnection } from '../store/presenceSlice';
+import { Canvas, NotificationOverlay, useNotifications, ChatWindow, CommandQueue } from '../components';
 import { usePresence, useCursorTracking } from '../hooks';
-import { getComplementaryColor } from '../utils/colorUtils';
+// import { getComplementaryColor } from '../utils/colorUtils';
 import { CANVAS_CONFIG } from '../types/canvas';
+import { startQueueProcessor } from '../ai/queueProcessor';
 
 /**
  * Main canvas application page (protected route)
  * Features collaborative canvas with real-time sync
  */
 export const CanvasPage: React.FC = () => {
+  const [createOpen, setCreateOpen] = useState(false);
   const user = useAppSelector(selectUser);
-  const selectedObject = useAppSelector(selectSelectedObject);
+  // const selectedObject = useAppSelector(selectSelectedObject);
   const viewport = useAppSelector(selectViewport);
-  const onlineUsers = useAppSelector(selectOnlineUsersList);
-  const onlineUsersCount = useAppSelector(selectOnlineUsersCount);
-  const isPresenceConnected = useAppSelector(selectPresenceConnection);
+  // const onlineUsers = useAppSelector(selectOnlineUsersList);
+  // const onlineUsersCount = useAppSelector(selectOnlineUsersCount);
+  // const isPresenceConnected = useAppSelector(selectPresenceConnection);
   const { notifications, addNotification, dismissNotification } = useNotifications();
 
   // Use display name if available, otherwise use email address
@@ -41,6 +43,11 @@ export const CanvasPage: React.FC = () => {
     enabled: !!user
   });
 
+  // Start a lightweight queue processor on mount (client lock via onSnapshot)
+  React.useEffect(() => {
+    startQueueProcessor('main');
+  }, []);
+
 
   // Handle add rectangle button
   const handleAddRectangle = useCallback(async () => {
@@ -52,6 +59,52 @@ export const CanvasPage: React.FC = () => {
       }
     } catch (error) {
       console.error('Error adding rectangle:', error);
+    }
+  }, [updateActivity]);
+
+  const handleAddCircle = useCallback(async () => {
+    try {
+      if ((window as any).canvasAddCircle) {
+        (window as any).canvasAddCircle();
+        await updateActivity();
+      }
+    } catch (error) {
+      console.error('Error adding circle:', error);
+    }
+  }, [updateActivity]);
+
+  const handleAddText = useCallback(async () => {
+    try {
+      if ((window as any).canvasAddText) {
+        (window as any).canvasAddText();
+        await updateActivity();
+      }
+    } catch (error) {
+      console.error('Error adding text:', error);
+    }
+  }, [updateActivity]);
+
+  const handleDeleteSelected = useCallback(async () => {
+    try {
+      if ((window as any).canvasDeleteSelected) {
+        (window as any).canvasDeleteSelected();
+        await updateActivity();
+      }
+    } catch (error) {
+      console.error('Error deleting object:', error);
+    }
+  }, [updateActivity]);
+
+  // Arrangement handlers
+  const callAndActivity = useCallback(async (fnName: string) => {
+    try {
+      const fn = (window as any)[fnName];
+      if (typeof fn === 'function') {
+        await fn();
+        await updateActivity();
+      }
+    } catch (error) {
+      console.error(`Error calling ${fnName}:`, error);
     }
   }, [updateActivity]);
 
@@ -82,6 +135,7 @@ export const CanvasPage: React.FC = () => {
               >
                 {displayName.charAt(0).toUpperCase()}
               </div>
+              {/* Arrangement Controls moved to floating toolbar (on canvas) */}
               <Link 
                 to="/logout"
                 className="text-xs sm:text-sm text-gray-500 hover:text-gray-700 shrink-0"
@@ -96,81 +150,90 @@ export const CanvasPage: React.FC = () => {
       {/* Main canvas area */}
       <main className="flex-1 p-4">
         <div className="max-w-7xl mx-auto">
-          {/* Canvas Toolbar */}
-          <div className="mb-3 bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                {/* Canvas Controls */}
+          {/* Top toolbar outside canvas */}
+          <div className="mb-3 flex items-center justify-center">
+            <div className="flex items-center space-x-3 bg-white border border-gray-200 rounded-md shadow px-3 py-1 whitespace-nowrap">
+              <div className="relative">
                 <button
-                  onClick={handleAddRectangle}
-                  className="flex items-center space-x-1 px-2 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                  title="Add Rectangle"
+                  onClick={() => setCreateOpen(v => !v)}
+                  className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+                  title="Create"
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span>Add Rectangle</span>
+                  Create
                 </button>
-              </div>
-              
-              <div className="flex items-center space-x-2 sm:space-x-4 text-xs sm:text-sm text-gray-600">
-                {/* Online Users List */}
-                <div className="flex items-center space-x-2">
-                  <div className={`w-3 h-3 rounded-full ${isPresenceConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                  <span className="font-medium">
-                    {onlineUsersCount} user{onlineUsersCount !== 1 ? 's' : ''} online
-                  </span>
-                  {onlineUsersCount > 0 && (
-                    <div className="flex items-center space-x-1 ml-2">
-                      {onlineUsers.slice(0, 3).map((onlineUser) => ( // Show max 3 users with full names
-                        <div
-                          key={onlineUser.uid}
-                          className="flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium border border-white shadow-sm"
-                          style={{ 
-                            backgroundColor: onlineUser.color,
-                            color: getComplementaryColor(onlineUser.color as any)
-                          }}
-                          title={`${onlineUser.displayName} ${onlineUser.uid === user?.uid ? '(you)' : ''}`}
-                        >
-                          <div className="w-3 h-3 rounded-full bg-white opacity-60" />
-                          <span className="whitespace-nowrap">
-                            {onlineUser.displayName} {onlineUser.uid === user?.uid ? '(you)' : ''}
-                          </span>
-                        </div>
-                      ))}
-                      {onlineUsersCount > 3 && (
-                        <div className="text-xs text-gray-500 ml-1">
-                          +{onlineUsersCount - 3} more
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-                
-                {selectedObject && (
-                  <div className="text-blue-600 font-medium">
-                    Selected: Rectangle
+                {createOpen && (
+                  <div className="absolute mt-1 left-0 bg-white border border-gray-200 rounded shadow text-xs min-w-[120px]">
+                    <button onClick={async () => { setCreateOpen(false); await handleAddRectangle(); }} className="block w-full text-left px-3 py-1 hover:bg-gray-100">Rectangle</button>
+                    <button onClick={async () => { setCreateOpen(false); await handleAddCircle(); }} className="block w-full text-left px-3 py-1 hover:bg-gray-100">Circle</button>
+                    <button onClick={async () => { setCreateOpen(false); await handleAddText(); }} className="block w-full text-left px-3 py-1 hover:bg-gray-100">Text</button>
                   </div>
                 )}
               </div>
+              <div className="w-px h-5 bg-gray-200" />
+              <button
+                onClick={handleDeleteSelected}
+                className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                title="Delete Selected"
+              >
+                Delete
+              </button>
             </div>
           </div>
           
-          {/* Canvas Container */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-4">
-            <Canvas 
-              width={CANVAS_CONFIG.VIEWPORT_WIDTH}
-              height={CANVAS_CONFIG.VIEWPORT_HEIGHT}
-              onNotification={addNotification}
-              onMouseMove={handleMouseMove}
-              onMouseLeave={handleMouseLeave}
-              onUserActivity={updateActivity}
-            />
+          {/* Canvas + right vertical arrangement toolbar + chat/queue */}
+          <div className="grid grid-cols-1 lg:grid-cols-[auto_220px_320px] gap-3 items-start">
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-2 sm:p-4">
+              <Canvas 
+                width={CANVAS_CONFIG.VIEWPORT_WIDTH}
+                height={CANVAS_CONFIG.VIEWPORT_HEIGHT}
+                onNotification={addNotification}
+                onMouseMove={handleMouseMove}
+                onMouseLeave={handleMouseLeave}
+                onUserActivity={updateActivity}
+              />
+            </div>
+            <div className="shrink-0">
+              <div className="flex flex-col space-y-2 bg-white border border-gray-200 rounded-md shadow p-2">
+                <button onClick={() => callAndActivity('canvasArrangeHorizontal')} className="px-2 py-1 text-[11px] bg-gray-100 border rounded hover:bg-gray-200" title="Arrange Horizontal">Horiz</button>
+                <button onClick={() => callAndActivity('canvasArrangeVertical')} className="px-2 py-1 text-[11px] bg-gray-100 border rounded hover:bg-gray-200" title="Arrange Vertical">Vert</button>
+                <button onClick={() => callAndActivity('canvasArrangeGrid')} className="px-2 py-1 text-[11px] bg-gray-100 border rounded hover:bg-gray-200" title="Arrange Grid">Grid</button>
+                <button onClick={() => callAndActivity('canvasDistributeHorizontal')} className="px-2 py-1 text-[11px] bg-gray-100 border rounded hover:bg-gray-200" title="Distribute Horizontally">Dist H</button>
+                <button onClick={() => callAndActivity('canvasDistributeVertical')} className="px-2 py-1 text-[11px] bg-gray-100 border rounded hover:bg-gray-200" title="Distribute Vertically">Dist V</button>
+              </div>
+            </div>
+            <div className="flex flex-col gap-3">
+              <div className="h-[360px]">
+                <ChatWindow canvasId="main" userId={user?.uid || 'anonymous'} displayName={displayName} />
+              </div>
+              <CommandQueue canvasId="main" />
+            </div>
           </div>
           
           {/* Instructions */}
           <div className="mt-4 text-center text-sm text-gray-500">
-            <p>Click "Add Rectangle" to create shapes • Drag to pan • Scroll to zoom • Click shapes to select</p>
+            <p>
+              Click "Add Rectangle" to create shapes • Drag to pan • Scroll to zoom • Click shapes to select • Shift-click to multi-select • Alt-drag to marquee select
+            </p>
+            <p className="mt-1">
+              Commands apply to visible objects by default — add <span className="font-medium">"anywhere"</span> to include off‑screen items.
+            </p>
+            {/* TEMP: Example chat commands for testing (remove if noisy) */}
+            <div className="mt-2 text-xs text-gray-500">
+              <div className="font-medium">Examples (for testing):</div>
+              <div>• Create rectangle x 100, y 200, width 150, height 100 red</div>
+              <div>• Create circle x 400, y 300, radius 60 blue</div>
+              <div>• Create text "Hello World" x 500, y 350</div>
+              <div>• Arrange horizontal red rectangles</div>
+              <div>• Arrange vertical text</div>
+              <div>• Arrange grid blue circles</div>
+              <div>• Distribute horizontal rectangles</div>
+              <div>• Delete red rectangles</div>
+              <div>• Rotate red rectangles 45 degrees</div>
+              <div>• Resize blue circle radius 120</div>
+              <div>• Resize text width 200 height 60</div>
+              <div>• Undo the last 3</div>
+            </div>
+            {/* END TEMP */}
           </div>
         </div>
       </main>

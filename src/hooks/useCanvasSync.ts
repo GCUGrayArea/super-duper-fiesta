@@ -49,6 +49,7 @@ interface UseCanvasSyncReturn {
   addObject: (object: CanvasObject) => Promise<void>;
   deleteObject: (objectId: string) => Promise<void>;
   forceSync: () => Promise<void>;
+  batchUpdateObjects: (updated: CanvasObject[]) => Promise<void>;
 }
 
 export function useCanvasSync({
@@ -165,12 +166,12 @@ export function useCanvasSync({
       if (!lastSynced) return;
 
       // Create updated object
-      const updatedObject: CanvasObject = {
+      const updatedObject = {
         ...currentObject,
-        ...updates,
+        ...(updates as any),
         updatedAt: Date.now(),
         lastModifiedBy: user.uid
-      };
+      } as CanvasObject;
 
       // Check if changes exceed sync thresholds
       const lastSyncedObject: CanvasObject = {
@@ -260,6 +261,26 @@ export function useCanvasSync({
     }
   }, [canvasId, user, enabled, isConnected, objects, dispatch]);
 
+  /**
+   * Batch update multiple objects with a single Firestore write
+   */
+  const batchUpdateObjects = useCallback(async (updated: CanvasObject[]) => {
+    if (!enabled || !user || !isConnected) return;
+    try {
+      await updateCanvasObjects(canvasId, updated, user.uid);
+      // Update sync state for updated objects
+      let newSyncState: SyncState = { ...syncStateRef.current };
+      for (const obj of updated) {
+        newSyncState = updateSyncStateTracking(newSyncState, obj);
+      }
+      dispatch(updateSyncState(newSyncState));
+      dispatch(setSyncTime(Date.now()));
+    } catch (error) {
+      console.error('Failed to batch update objects:', error);
+      dispatch(setCanvasError(error instanceof Error ? error.message : 'Batch update failed'));
+    }
+  }, [canvasId, user, enabled, isConnected, dispatch]);
+
   // Initialize canvas sync on mount and user change
   useEffect(() => {
     if (enabled && user) {
@@ -280,6 +301,7 @@ export function useCanvasSync({
     syncObject,
     addObject,
     deleteObject,
-    forceSync
+    forceSync,
+    batchUpdateObjects,
   };
 }

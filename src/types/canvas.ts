@@ -24,8 +24,32 @@ export interface Rectangle extends BaseCanvasObject {
   rotation: number; // Rotation angle in degrees (default: 0)
 }
 
+// Circle/Ellipse object interface (rotation out of scope for MVP)
+export interface Circle extends BaseCanvasObject {
+  type: 'circle';
+  width: number; // Bounding box width (ellipse support)
+  height: number; // Bounding box height (ellipse support)
+  fill: string;
+  stroke: string; // Default: "black"
+  strokeWidth: number; // Default: 1
+  opacity: number; // Default: 1.0 (100%)
+}
+
+// Text object interface (basic fields for MVP)
+export interface TextObject extends BaseCanvasObject {
+  type: 'text';
+  text: string;
+  width: number; // Approximated bounding width for validation/layout
+  height: number; // Approximated bounding height for validation/layout
+  fontSize: number; // Default: 14 (px)
+  maxWidth: number; // Default: 500
+  fill: string; // Text color
+  opacity: number; // Default: 1.0 (100%)
+  rotation: number; // Rotation angle in degrees (default: 0)
+}
+
 // Union type for all canvas objects (extensible for future shapes)
-export type CanvasObject = Rectangle;
+export type CanvasObject = Rectangle | Circle | TextObject;
 
 // Viewport state interface
 export interface Viewport {
@@ -54,11 +78,24 @@ export const CANVAS_CONFIG = {
   ROTATION_THRESHOLD: 5, // 5 degree threshold for rotation changes (Phase 4)
   DEFAULT_RECTANGLE_WIDTH: 150,
   DEFAULT_RECTANGLE_HEIGHT: 150,
+  // Shape limits
+  MIN_GEOMETRY_SIZE: 20, // Min width/height for rectangle and circle
+  DEFAULT_CIRCLE_DIAMETER: 120, // Used when not specified
+  DEFAULT_TEXT_FONT_SIZE: 14, // px
+  DEFAULT_TEXT_MAX_WIDTH: 500, // px
 } as const;
 
 // Type guards for canvas objects
 export function isRectangle(obj: CanvasObject): obj is Rectangle {
   return obj.type === 'rectangle';
+}
+
+export function isCircle(obj: CanvasObject): obj is Circle {
+  return obj.type === 'circle';
+}
+
+export function isTextObject(obj: CanvasObject): obj is TextObject {
+  return obj.type === 'text';
 }
 
 // Firestore canvas document structure for Phase 4 sync
@@ -80,3 +117,7 @@ export interface ObjectLock {
 
 // Utility type for object creation (without computed fields)
 export type CreateRectangleData = Omit<Rectangle, 'id' | 'createdAt' | 'updatedAt' | 'zIndex' | 'lastModifiedBy'>;
+
+export type CreateCircleData = Omit<Circle, 'id' | 'createdAt' | 'updatedAt' | 'zIndex' | 'lastModifiedBy'>;
+
+export type CreateTextData = Omit<TextObject, 'id' | 'createdAt' | 'updatedAt' | 'zIndex' | 'lastModifiedBy'>;
